@@ -66,6 +66,11 @@ _DIRECT_EVIDENCE_SOURCES: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "loop_patterns": ("loop_id", "person_id", ("updated_at", "created_at")),
     "personal_language_patterns": ("language_pattern_id", "person_id", ("updated_at", "created_at")),
     "phrase_templates": ("template_id", "person_id", ("updated_at", "created_at")),
+    "visual_evidence_assets_v19": ("visual_asset_id", "person_id", ("captured_at", "created_at")),
+    "visual_events_v19": ("visual_event_id", "person_id", ("occurred_at", "created_at")),
+    "world_entity_links_v19": ("world_entity_link_id", "person_id", ("observed_at", "created_at")),
+    "scene_session_summaries_v19": ("scene_summary_id", "person_id", ("summary_start", "summary_end", "created_at")),
+    "ui_interaction_outcomes_v19": ("ui_outcome_id", "person_id", ("observed_at", "created_at")),
 }
 _CONVERSATION_EVIDENCE_SOURCES: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "conversations": ("conversation_id", "conversation_id", ("started_at", "created_at")),
