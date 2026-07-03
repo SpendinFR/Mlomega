@@ -224,7 +224,8 @@ Statut : terminé — commit : 76509be — tests : `pytest tests/v19` (9 passed)
 **[x] E11. Tables V19** (`src/mlomega_audio_elite/v19_visual_store.py`). SCHEMA propre + `ensure_v19_visual_schema()` (pattern §2.8) : `visual_evidence_assets_v19`, `visual_events_v19`, `world_entity_links_v19`, `scene_session_summaries_v19`, `ui_interaction_outcomes_v19` (colonnes : handoff §Lot 2 + toujours `person_id`, `live_session_id`, temps UTC + `created_at`). Puis **enregistrer chaque table de preuve dans `_DIRECT_EVIDENCE_SOURCES`** (format §2.7) — ex. `"visual_events_v19": ("visual_event_id", "person_id", ("occurred_at", "created_at"))`. Test : insertion + `validate_stratum_evidence` accepte une ref vers ces tables.
 Statut : terminé — commit : 68a9386 — tests : `pytest tests/v19/test_memory_v19.py -q` (2 passed)
 
-**E12. Endpoints** (`api.py`, style §2.9, additif en fin de fichier) : `/ingest/visual-event` (EvidenceEvent JSON → `visual_events_v19` + asset), `/ingest/scene-summary`, `/memory/correction-visual`, `/xr/session-health`, `/evidence/request-clip`. Chaque payload porte `memory_owner_id` explicite (règle §2.10).
+**[x] E12. Endpoints** (`api.py`, style §2.9, additif en fin de fichier) : `/ingest/visual-event` (EvidenceEvent JSON → `visual_events_v19` + asset), `/ingest/scene-summary`, `/memory/correction-visual`, `/xr/session-health`, `/evidence/request-clip`. Chaque payload porte `memory_owner_id` explicite (règle §2.10).
+Statut : terminé — commit : 5fd18d805586b0928c8ee5c4c8620aa07aa8af2e — tests : `pytest tests/v19/test_memory_v19.py -q` (3 passed) ; `pytest tests/v19 -m memory -q` (3 passed, 10 deselected).
 
 **E13. MemoryBridge + EvidenceStore** (`services/live-pc/memory_bridge.py`, `evidence_store.py`). Déclencheurs de sélection (handoff §Lot 2) → clip depuis ring buffer/tampon-jour → sha256 → POST `/ingest/visual-event`. Tampon-jour : encodage basse résolution continu, purge au close-day, quota doctor.
 

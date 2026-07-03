@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 try:
-    from fastapi import FastAPI, UploadFile, File, Form, Body
+    from fastapi import FastAPI, UploadFile, File, Form, Body, HTTPException
     from fastapi.responses import JSONResponse
 except Exception:  # pragma: no cover
     FastAPI = None  # type: ignore
@@ -15,6 +15,14 @@ from .retrieval import answer, search
 from .consolidation import consolidate_all
 from .voice_identity import enroll_voice, match_voice
 from .v19_visual_store import store_scene_summary, store_ui_outcome, store_visual_event
+
+
+def _v19_store_response(fn, payload: dict, key: str, **extra):
+    try:
+        value = fn(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {key: value, **extra}
 
 if FastAPI is not None:
     app = FastAPI(title="MemoryLight Omega Audio Elite V3.1 Strict")
@@ -75,16 +83,20 @@ if FastAPI is not None:
     # memory_owner_id; the store rejects implicit owner inference.
     @app.post("/ingest/visual-event")
     def ingest_visual_event(payload: dict = Body(...)):
-        return {"visual_event_id": store_visual_event(payload)}
+        return _v19_store_response(store_visual_event, payload, "visual_event_id")
 
     @app.post("/ingest/scene-summary")
     def ingest_scene_summary(payload: dict = Body(...)):
-        return {"scene_summary_id": store_scene_summary(payload)}
+        return _v19_store_response(store_scene_summary, payload, "scene_summary_id")
 
     @app.post("/memory/correction-visual")
     def correction_visual(payload: dict = Body(...)):
-        event_id = store_visual_event({**payload, "event_type": payload.get("event_type") or "visual_correction", "truth_level": payload.get("truth_level") or "observed"})
-        return {"visual_event_id": event_id, "status": "recorded"}
+        return _v19_store_response(
+            store_visual_event,
+            {**payload, "event_type": payload.get("event_type") or "visual_correction", "truth_level": payload.get("truth_level") or "observed"},
+            "visual_event_id",
+            status="recorded",
+        )
 
     @app.get("/xr/session-health")
     def xr_session_health(memory_owner_id: str, live_session_id: str):
@@ -92,7 +104,11 @@ if FastAPI is not None:
 
     @app.post("/evidence/request-clip")
     def evidence_request_clip(payload: dict = Body(...)):
-        outcome_id = store_ui_outcome({**payload, "event": payload.get("event") or "clip_requested", "source": payload.get("source") or "evidence_request"})
-        return {"ui_outcome_id": outcome_id, "status": "queued"}
+        return _v19_store_response(
+            store_ui_outcome,
+            {**payload, "event": payload.get("event") or "clip_requested", "source": payload.get("source") or "evidence_request"},
+            "ui_outcome_id",
+            status="queued",
+        )
 else:  # pragma: no cover
     app = None
