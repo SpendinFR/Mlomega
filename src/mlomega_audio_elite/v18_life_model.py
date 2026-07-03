@@ -71,6 +71,9 @@ _DIRECT_EVIDENCE_SOURCES: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "world_entity_links_v19": ("world_entity_link_id", "person_id", ("observed_at", "created_at")),
     "scene_session_summaries_v19": ("scene_summary_id", "person_id", ("summary_start", "summary_end", "created_at")),
     "ui_interaction_outcomes_v19": ("ui_outcome_id", "person_id", ("observed_at", "created_at")),
+    "brain2_spatial_routine_models": ("routine_id", "person_id", ("last_observed", "updated_at", "created_at")),
+    "brain2_visual_task_models": ("task_model_id", "person_id", ("updated_at", "created_at")),
+    "brain2_ui_preference_models": ("ui_pref_id", "person_id", ("updated_at", "created_at")),
 }
 _CONVERSATION_EVIDENCE_SOURCES: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "conversations": ("conversation_id", "conversation_id", ("started_at", "created_at")),

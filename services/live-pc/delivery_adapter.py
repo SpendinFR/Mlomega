@@ -28,7 +28,7 @@ def delivery_row_to_ui_intent(row: sqlite3.Row | dict[str, Any]) -> UIIntent:
         ui_intent_id=f"ui-{uuid.uuid4()}", producer="brainlive", source_frame_id=None,
         component="context_card", anchor={"type": "panel", "position": "side"},
         content={"message": data.get("message") or "", "action_type": data.get("action_type") or "notify"},
-        truth_level="inferred", confidence=1.0, priority=int(float(data.get("priority") or 0) * 100),
+        truth_level="inferred", confidence=1.0, priority=max(0.0, min(1.0, float(data.get("priority") or 0.0))),
         ttl_ms=15000, evidence_refs=list(refs), delivery_id=data.get("delivery_id"),
     )
 
