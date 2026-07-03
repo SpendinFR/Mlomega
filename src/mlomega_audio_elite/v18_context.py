@@ -24,6 +24,7 @@ _FIELD_TABLE={
     "brainlive_life_hypotheses":"brainlive_life_hypotheses", "v17_global_life_patterns":"brain2_global_life_patterns_v17",
     "v17_recent_observed_cases":"brain2_observed_cases_v17", "brainlive_routine_cards":"brainlive_routine_cards",
     "brainlive_affordance_matches":"brainlive_affordance_matches",
+    "self_schema_hot":"self_schema_v19", "scene_focus":"brainlive_world_states",
 }
 
 def _id(row: Mapping[str,Any]) -> str | None:

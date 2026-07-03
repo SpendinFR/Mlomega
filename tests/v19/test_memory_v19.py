@@ -122,3 +122,51 @@ def test_v19_api_endpoints_persist_owner_scoped_payloads(tmp_path, monkeypatch):
         assert con.execute("SELECT COUNT(*) FROM visual_events_v19 WHERE person_id='person-api'").fetchone()[0] == 2
         assert con.execute("SELECT COUNT(*) FROM scene_session_summaries_v19 WHERE person_id='person-api'").fetchone()[0] == 1
         assert con.execute("SELECT COUNT(*) FROM ui_interaction_outcomes_v19 WHERE person_id='person-api'").fetchone()[0] == 1
+
+
+def test_e13_memory_bridge_hashes_selected_evidence(tmp_path):
+    import importlib.util
+    store_spec = importlib.util.spec_from_file_location('v19_evidence_store', Path('services/live-pc/evidence_store.py'))
+    store_mod = importlib.util.module_from_spec(store_spec); store_spec.loader.exec_module(store_mod)
+    bridge_spec = importlib.util.spec_from_file_location('v19_memory_bridge', Path('services/live-pc/memory_bridge.py'))
+    bridge_mod = importlib.util.module_from_spec(bridge_spec); bridge_spec.loader.exec_module(bridge_mod)
+    calls=[]
+    bridge=bridge_mod.MemoryBridge(store_mod.EvidenceStore(tmp_path/'evidence'), lambda path,payload: calls.append((path,payload)) or {'ok':True,'visual_event_id':'evt'})
+    res=bridge.ingest_trigger({'memory_owner_id':'p','live_session_id':'s','trigger':'explicit_keep','asset_bytes':b'frame','asset_kind':'keyframe'})
+    assert res['status']=='posted'
+    assert calls[0][0]=='/ingest/visual-event'
+    assert calls[0][1]['evidence'][0]['sha256']
+
+
+def test_e14_xr_keyframe_insert_only_reaches_timeline(tmp_path, monkeypatch):
+    db_path=tmp_path/'memory.db'; monkeypatch.setenv('MLOMEGA_DB', str(db_path)); monkeypatch.setenv('MLOMEGA_RAW', str(tmp_path/'raw'))
+    img=tmp_path/'kf.jpg'; img.write_bytes(b'fakejpeg')
+    from mlomega_audio_elite.v19_keyframes import register_xr_keyframe
+    from mlomega_audio_elite.db import connect
+    fid=register_xr_keyframe(person_id='p', live_session_id='s', image_path=str(img), captured_at='2026-07-03T09:00:00+00:00', db_path=db_path)
+    with connect(db_path) as con:
+        row=dict(con.execute('SELECT * FROM vision_frames WHERE frame_id=?',(fid,)).fetchone())
+        assert row['capture_mode']=='xr_keyframe'
+        assert row['image_sha256']
+        assert con.execute('SELECT COUNT(*) FROM raw_assets').fetchone()[0]==1
+
+
+def test_e16_to_e20_synthetic_life_prediction_and_self_schema(tmp_path, monkeypatch):
+    db_path=tmp_path/'memory.db'; monkeypatch.setenv('MLOMEGA_DB', str(db_path)); monkeypatch.setenv('MLOMEGA_RAW', str(tmp_path/'raw')); monkeypatch.setenv('MLOMEGA_HOME', str(tmp_path))
+    from simulators.synthetic_life import run_synthetic_life
+    from mlomega_audio_elite.db import connect
+    result=run_synthetic_life(person_id='person-synth', days=30, db_path=db_path)
+    assert result['verified'] >= 1
+    assert result['refuted'] >= 1
+    assert result['conditional_patterns'] >= 1
+    with connect(db_path) as con:
+        assert con.execute("SELECT COUNT(*) FROM self_schema_v19 WHERE entry_type='conditionnel'").fetchone()[0] >= 1
+        assert con.execute("SELECT COUNT(*) FROM prediction_outcomes_v19 WHERE status='verified'").fetchone()[0] >= 1
+
+
+def test_e19_hot_capsule_accepts_hot_scene_context(monkeypatch):
+    monkeypatch.setenv('MLOMEGA_V18_HOT_CAPSULE_MAX_CHARS','2500')
+    from mlomega_audio_elite.v18_hot_capsule import build_hot_capsule_payload
+    payload, meta = build_hot_capsule_payload(episode={'summary':'x'}, manifest={'scope':{'person_id':'p','live_session_id':'s','as_of':'2026-07-03T00:00:00+00:00'}, 'self_schema_hot':[{'statement':'quand Y alors Z'}], 'scene_focus':'bureau'}, fused={}, route={}, target_ms=1000)
+    assert payload['hot_scene_context']['self_schema_hot']
+    assert meta['rendered_input_chars'] <= meta['input_budget_chars']
