@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MLOmega XR G1 Gate — Android manifest.
+  Permissions per the official XREAL SDK "Access RGB Camera" documentation
+  (https://docs.xreal.com/Camera/Access%20RGB%20Camera):
+    - RECORD_AUDIO and FOREGROUND_SERVICE_MEDIA_PROJECTION are explicitly required
+      for the RGB Eye camera capture path.
+    - CAMERA is required by Android convention for any camera access.
+    - INTERNET is declared for the WebRTC transport delivered later (E24).
+  The <uses-feature> for XR glasses is contributed by the XREAL SDK manifest and
+  merged at build time; this file adds only what the G1 app itself needs.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="com.mlomega.xrg1gate">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
+    <application android:allowBackup="false">
+        <activity android:name="com.unity3d.player.UnityPlayerActivity"
+                  android:screenOrientation="landscape"
+                  android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density"
+                  android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+        </activity>
+
+        <!-- Foreground service used by the Eye capture path (media projection class). -->
+        <service
+            android:name="com.mlomega.xrg1gate.EyeCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+    </application>
+</manifest>

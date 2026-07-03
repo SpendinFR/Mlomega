@@ -42,3 +42,52 @@
 - **Correctif timezone G0 (prévu par le plan)** : `test_delivery_feedback_and_outcome_are_linked_into_brain2_raw_timeline` calculait `package_date` depuis l'horloge UTC alors que `_period_bounds` interprète un jour LOCAL → échec entre minuit et l'offset local. Le test dérive maintenant le jour local. Seule modification du dossier de référence, explicitement budgétée par le gate G0 (« correctif timezone test delivery »).
 - **`run_life_model_v19_stage`** : appelle désormais `ensure_v19_visual_schema` (pattern lazy-ensure §2.8) avant d'interroger `visual_events_v19`.
 - Validation finale : `tests/v19` 40/40 ; suite V18 108/108 (dont adaptive_live 6/6 après correctif timezone).
+
+
+## 2026-07-04 — E22 G1 Unity (app XREAL minimale, gate G1)
+
+Recherche ciblée effectuée sur la doc officielle XREAL (https://docs.xreal.com/) — 3 pages retenues :
+« Getting Started with XREAL SDK », « Camera / Access RGB Camera », « Sample Code ». Ce qu'on
+retient et qui guide l'implémentation `apps/xr-mobile/` :
+
+- **Version Unity** : XREAL SDK 3.1.0 supporte Unity 2021.3 LTS, 2022.3 LTS et **6000.0.X LTS**
+  (Unity 6 LTS). On cible Unity 6 LTS → `ProjectVersion.txt` = `6000.0.23f1`.
+- **Import du SDK** : tarball UPM. `Window → Package Manager → Add package from tarball` →
+  `com.xreal.xr.tar.gz`. Le SDK est **propriétaire** (téléchargé sur developer.xreal.com/download) :
+  on ne le committe PAS. `Packages/manifest.json` le référence en `file:` vers
+  `Packages/xreal-sdk/com.xreal.xr.tar.gz` (chemin ignoré par git, documenté dans le README).
+- **XR Plug-in Management** : cocher le provider **« XREAL »** sous l'onglet Android
+  (`Edit → Project Settings → XR Plug-in Management`). Reflété dans
+  `ProjectSettings/XRPackageSettings.asset` et `Packages/manifest.json`
+  (`com.unity.xr.management`).
+- **Project Settings Android requis** (doc XREAL) :
+  Default Orientation = **Landscape** (doc dit Portrait pour le sample générique, mais notre app
+  stéréo XR impose Landscape Left — noté comme divergence assumée ci-dessous) ;
+  Auto Graphics API = **désactivé**, Graphics API = **OpenGLES3** ; Scripting Backend = **IL2CPP** ;
+  Target Architecture = **ARM64** ; Minimum API Level = **Android 10.0 (API 29)** ;
+  Target API Level = Automatic ; VSync = Don't Sync ; multithreaded rendering **désactivé** si
+  contenu Overlay.
+- **Caméra RGB (Eye)** : classe `RGBCameraTexture` (namespace `Unity.XR.XREAL` en SDK 3.x ;
+  ex-`NRRGBCamTexture` de NRSDK). Format **YUV_420_888 exclusivement** : `GetYUVFormatTextures()`
+  renvoie 3 textures (Y, U, V) → conversion RGB par **shader** (pas de `GetRGBTexture()` natif).
+  Cycle `Play()` / `Stop()`. **Seul l'accessoire Eye des XREAL One series** supporte la capture.
+- **Permissions Android** (doc « Access RGB Camera ») : `RECORD_AUDIO` +
+  `FOREGROUND_SERVICE_MEDIA_PROJECTION` sont **explicitement exigées** pour l'Eye. `CAMERA` non
+  citée par cette page mais requise par convention Android pour tout accès caméra → on la déclare.
+  `INTERNET` ajoutée pour le futur transport WebRTC (E24). Toutes demandées au runtime via
+  `PermissionGate`.
+
+Décisions de conception E22 :
+- **Scène G1Gate.unity construite par script Editor** : écrire un `.unity` YAML valide à la main
+  (GUIDs, fileIDs, refs de composants) est trop fragile sans Unity pour valider. On fournit
+  `Assets/Scripts/Editor/G1SceneBuilder.cs` (menu `MLOmega/Build G1 Gate Scene`) qui construit et
+  sauvegarde la scène en un clic. Choix documenté ici comme prévu par le plan.
+- **Incertitude matérielle actée** (héritée du handoff §1.2.4) : la doc dit « One series » sans
+  citer explicitement One Pro pour l'Eye. Si l'Eye est inaccessible sur le matériel réel → plan B
+  `one-xr` (pose Kotlin natif, MIT) + caméra du S25. Documenté dans le README (checklist G1).
+- **Divergence orientation assumée** : la doc XREAL sample recommande Portrait ; une app de rendu
+  stéréo XR impose Landscape Left. On choisit Landscape (cohérent avec le rendu stéréo XREAL) et on
+  le note ici.
+- **Impossible de compiler ici** : aucun Unity/Android SDK dans ce conteneur. Le C# est écrit pour
+  la fidélité doc + rigueur, non vérifié par compilation. La validation finale est **matérielle**
+  (S25 + XREAL), via la checklist `apps/xr-mobile/README.md`. E22 n'est pas coché [x].

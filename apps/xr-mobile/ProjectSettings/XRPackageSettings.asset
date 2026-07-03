@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &1
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Name: XRGeneralSettingsPerBuildTarget
+  m_EditorClassIdentifier: 'Unity.XR.Management.Editor:UnityEditor.XR.Management.Metadata:XRPackageMetadataStore'
+  # Loader providers enabled per build target. Android must list the XREAL loader
+  # (Unity.XR.XREAL.XREALLoader) so 'XREAL' shows as checked under
+  # Edit > Project Settings > XR Plug-in Management (Android tab).
+  # This asset is authored by the SDK once installed; kept here as a documented
+  # placeholder so the intended provider is version-controlled.
+  Metadata:
+    m_Loaders:
+    - assemblyName: Unity.XR.XREAL
+      loaderTypes:
+      - Unity.XR.XREAL.XREALLoader
+      supportedBuildTargets:
+      - 7  # Android
