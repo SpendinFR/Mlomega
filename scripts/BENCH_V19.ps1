@@ -1,1 +1,4 @@
-Write-Host "Run pytest tests/v19 -m 'contracts or transport' and record ingress P50/P95 in docs/BENCH_RESULTS.md"
+$ErrorActionPreference = "Stop"
+Write-Host "Running MLOmega V19 simulated ingress bench (no hardware/H.264 decode in this container)."
+python (Join-Path $PSScriptRoot "bench_v19_sim.py")
+exit $LASTEXITCODE
