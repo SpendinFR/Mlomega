@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from packages.contracts.python.models import UIIntent, UIReceipt
-from mlomega_audio_elite.db import connect, write_transaction
+from mlomega_audio_elite.db import connect
 from mlomega_audio_elite.utils import json_loads
 from mlomega_audio_elite.v18_8_live_policy import record_delivery_feedback
 
@@ -41,6 +41,35 @@ class RendererHub:
         self.sent.append(intent)
 
 
+class WebSocketRendererHub(RendererHub):
+    """Broadcast UIIntent JSON to connected companion-web/XR renderers."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._clients: set[Any] = set()
+
+    async def connect(self, websocket: Any) -> None:
+        await websocket.accept()
+        self._clients.add(websocket)
+
+    def disconnect(self, websocket: Any) -> None:
+        self._clients.discard(websocket)
+
+    async def push(self, intent: UIIntent) -> None:
+        await super().push(intent)
+        if not self._clients:
+            return
+        payload = intent.model_dump_json()
+        stale: list[Any] = []
+        for websocket in list(self._clients):
+            try:
+                await websocket.send_text(payload)
+            except Exception:
+                stale.append(websocket)
+        for websocket in stale:
+            self.disconnect(websocket)
+
+
 class DeliveryAdapter:
     def __init__(self, renderer: RendererHub | None = None) -> None:
         self.renderer = renderer or RendererHub()
@@ -70,8 +99,54 @@ class DeliveryAdapter:
         )
 
 
-async def main_loop(interval_s: float = 0.5) -> None:
-    adapter = DeliveryAdapter()
+def create_app(adapter: DeliveryAdapter | None = None):
+    """Create the V19 delivery WebSocket app used by companion-web.
+
+    Endpoint contract:
+    * GET /health returns basic readiness and connected renderer count.
+    * WS /ws pushes queued BrainLive UIIntent messages as JSON.
+    * Messages received on /ws are UIReceipt JSON and are persisted via V18.8 feedback.
+    """
+    try:
+        from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+    except ImportError as exc:  # pragma: no cover - exercised only without API deps installed
+        raise RuntimeError("fastapi is required for delivery_adapter.create_app()") from exc
+
+    renderer = adapter.renderer if adapter else WebSocketRendererHub()
+    if not isinstance(renderer, WebSocketRendererHub):
+        renderer = WebSocketRendererHub()
+    app_adapter = adapter or DeliveryAdapter(renderer=renderer)
+    app_adapter.renderer = renderer
+    app = FastAPI(title="MLOmega V19 delivery adapter")
+
+    @app.get("/health")
+    async def health() -> dict[str, Any]:
+        return {"status": "ok", "connected_renderers": len(renderer._clients), "sent_intents": len(renderer.sent)}
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket) -> None:
+        await renderer.connect(websocket)
+        await app_adapter.dispatch_once()
+        try:
+            while True:
+                data = await websocket.receive_text()
+                receipt = UIReceipt.model_validate_json(data)
+                app_adapter.record_receipt(receipt)
+        except WebSocketDisconnect:
+            renderer.disconnect(websocket)
+
+    app.state.delivery_adapter = app_adapter
+    app.state.renderer = renderer
+    return app
+
+
+async def main_loop(interval_s: float = 0.5, adapter: DeliveryAdapter | None = None) -> None:
+    adapter = adapter or DeliveryAdapter()
     while True:
         await adapter.dispatch_once()
         await asyncio.sleep(interval_s)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(create_app(), host="0.0.0.0", port=8706)
