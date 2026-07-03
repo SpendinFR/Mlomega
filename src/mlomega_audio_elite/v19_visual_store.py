@@ -93,6 +93,52 @@ CREATE TABLE IF NOT EXISTS ui_interaction_outcomes_v19 (
 );
 CREATE INDEX IF NOT EXISTS idx_v19_ui_outcomes_owner_time ON ui_interaction_outcomes_v19(person_id, observed_at);
 CREATE INDEX IF NOT EXISTS idx_v19_ui_outcomes_delivery ON ui_interaction_outcomes_v19(delivery_id);
+
+CREATE TABLE IF NOT EXISTS brain2_spatial_routine_models (
+  routine_id TEXT PRIMARY KEY,
+  person_id TEXT NOT NULL,
+  live_session_id TEXT,
+  entity_key TEXT NOT NULL,
+  place_key TEXT NOT NULL,
+  time_slot TEXT NOT NULL,
+  occurrence_count INTEGER NOT NULL DEFAULT 0,
+  confidence REAL NOT NULL DEFAULT 0.0,
+  evidence_refs_json TEXT DEFAULT '[]',
+  first_observed TEXT,
+  last_observed TEXT,
+  updated_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_brain2_spatial_routine_owner ON brain2_spatial_routine_models(person_id, updated_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_brain2_spatial_routine_key ON brain2_spatial_routine_models(person_id, entity_key, place_key, time_slot);
+
+CREATE TABLE IF NOT EXISTS brain2_visual_task_models (
+  task_model_id TEXT PRIMARY KEY,
+  person_id TEXT NOT NULL,
+  live_session_id TEXT,
+  task_key TEXT NOT NULL,
+  step_json TEXT DEFAULT '{}',
+  occurrence_count INTEGER NOT NULL DEFAULT 0,
+  confidence REAL NOT NULL DEFAULT 0.0,
+  evidence_refs_json TEXT DEFAULT '[]',
+  updated_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_brain2_visual_task_owner ON brain2_visual_task_models(person_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS brain2_ui_preference_models (
+  ui_pref_id TEXT PRIMARY KEY,
+  person_id TEXT NOT NULL,
+  live_session_id TEXT,
+  component TEXT NOT NULL,
+  preference_json TEXT DEFAULT '{}',
+  occurrence_count INTEGER NOT NULL DEFAULT 0,
+  confidence REAL NOT NULL DEFAULT 0.0,
+  evidence_refs_json TEXT DEFAULT '[]',
+  updated_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_brain2_ui_pref_owner ON brain2_ui_preference_models(person_id, updated_at);
 """
 
 

@@ -204,7 +204,12 @@ def test_delivery_feedback_and_outcome_are_linked_into_brain2_raw_timeline(monke
     )
     assert outcome["delivery_id"] == delivery["delivery_id"]
 
-    day = now_iso()[:10]
+    # package_date is a LOCAL calendar day (_period_bounds converts local ->
+    # UTC); deriving it from the UTC clock shifted it by one day between
+    # midnight and UTC-offset hours, making this test fail at night (G0 fix).
+    from datetime import datetime
+
+    day = datetime.now().astimezone().strftime("%Y-%m-%d")
     raw = collect_live_raw_timeline(person_id="me", package_date=day, live_session_id=sid)
     tables = {row["source_table"] for row in raw["timeline"]}
     assert "brainlive_intervention_delivery_queue" in tables

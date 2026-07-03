@@ -34,7 +34,7 @@ TruthLevel = Literal['observed','probable','remembered','inferred','replay']
 class UIIntent(StrictModel):
     ui_intent_id: str; producer: Literal['ultralive','visionrt','brainlive']; source_frame_id: str | None = None
     target_track_id: str | None = None; entity_id: str | None = None; component: str; anchor: dict[str, Any]
-    content: dict[str, Any]; truth_level: TruthLevel; confidence: float; priority: int; ttl_ms: int
+    content: dict[str, Any]; truth_level: TruthLevel; confidence: float; priority: float; ttl_ms: int
     ui_hint: dict[str, Any] = Field(default_factory=dict); evidence_refs: list[str] = Field(default_factory=list); delivery_id: str | None = None
 
 class UIReceipt(StrictModel):

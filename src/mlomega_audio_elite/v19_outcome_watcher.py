@@ -99,6 +99,7 @@ def resolve_prediction_outcomes(*, person_id: str, package_date: str, db_path=No
     resolved_at = now_iso()
     now_dt = _parse_dt(resolved_at) or datetime.now(timezone.utc)
     results: list[dict[str, Any]] = []
+    pending_calibrations: list[tuple[str, str, str]] = []
     conversation_auto = _call_conversation_auto_verifier(person_id=person_id)
     with connect(db_path) as con, write_transaction(con):
         preds = [dict(r) for r in con.execute("SELECT * FROM predictions_v19 WHERE person_id=? AND status='open'", (person_id,)).fetchall()]
@@ -130,8 +131,15 @@ def resolve_prediction_outcomes(*, person_id: str, package_date: str, db_path=No
                 status = "unverifiable"
                 chosen = None
             evidence_refs = [{"source_table": "visual_events_v19", "source_id": chosen["visual_event_id"]}] if chosen else []
-            calibration = _try_register_calibration(person_id=person_id, prediction_id=pred["prediction_id"], status=status, resolved_at=resolved_at, db_path=db_path) if status in {"verified", "refuted"} else {"status": "skipped", "reason": status}
+            # Calibration writes on a second connection; deferred until the
+            # outer write transaction releases its lock (SQLite single-writer).
+            if status in {"verified", "refuted"}:
+                calibration: dict[str, Any] = {"status": "pending"}
+            else:
+                calibration = {"status": "skipped", "reason": status}
             oid = stable_id("outv19", pred["prediction_id"], status, json_dumps(evidence_refs))
+            if status in {"verified", "refuted"}:
+                pending_calibrations.append((oid, pred["prediction_id"], status))
             insert_only(
                 con,
                 "prediction_outcomes_v19",
@@ -150,4 +158,21 @@ def resolve_prediction_outcomes(*, person_id: str, package_date: str, db_path=No
             if status != "unverifiable":
                 con.execute("UPDATE predictions_v19 SET status=? WHERE prediction_id=?", (status, pred["prediction_id"]))
             results.append({"prediction_id": pred["prediction_id"], "status": status})
+
+    for oid, prediction_id, status in pending_calibrations:
+        calibration = _try_register_calibration(
+            person_id=person_id, prediction_id=prediction_id, status=status,
+            resolved_at=resolved_at, db_path=db_path,
+        )
+        with connect(db_path) as con, write_transaction(con):
+            row = con.execute(
+                "SELECT audit_json FROM prediction_outcomes_v19 WHERE outcome_id=?", (oid,)
+            ).fetchone()
+            if row:
+                audit = json_loads(row["audit_json"], {}) or {}
+                audit["calibration"] = calibration
+                con.execute(
+                    "UPDATE prediction_outcomes_v19 SET audit_json=? WHERE outcome_id=?",
+                    (json_dumps(audit), oid),
+                )
     return {"status": "completed", "resolved": results, "count": len(results), "conversation_auto_verifier": conversation_auto}

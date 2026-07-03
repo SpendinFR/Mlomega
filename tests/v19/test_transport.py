@@ -16,7 +16,7 @@ def test_webrtc_frame_queue_bounded_drops_old_frames():
     async def run():
         q = gateway.LatestFrameQueue()
         dev = fake.FakeXrDevice(frames=3, fps=0)
-        await gateway.pump_latest(gateway.AiortcIngress(dev.stream()), q, limit=3)
+        await gateway.pump_latest(gateway.IterableIngress(dev.stream()), q, limit=3)
         assert q.stats()['queue_size'] == 1
         assert q.stats()['dropped_frames'] == 2
         _frame, envelope = await q.get_latest()

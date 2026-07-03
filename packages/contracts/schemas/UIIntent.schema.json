@@ -86,7 +86,7 @@
     },
     "priority": {
       "title": "Priority",
-      "type": "integer"
+      "type": "number"
     },
     "ttl_ms": {
       "title": "Ttl Ms",
