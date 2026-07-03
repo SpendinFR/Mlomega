@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem MLOmega_V18_8_1_Evidence_Connected -Recurse -Directory | Where-Object { $_.FullName -notmatch 'node_modules|\\\\.git|__pycache__|\\\\.venv|venv|models|build|dist' } | ForEach-Object { $_.FullName.Replace\\(\"$PWD\\\\\", ''\\) } | Select-Object -First 200)",
+      "Bash(pandoc -t markdown \"Guide_Maitre_MLOmega_V19_Transformation_XR_Live.docx\" -o \"/c/Users/wabad/AppData/Local/Temp/claude/C--Users-wabad-Downloads-FABLE/1deaadd4-ae09-42fa-81bb-b5d4722f5d41/scratchpad/guide_v19.md\")",
+      "Read(//c/Users/wabad/AppData/Local/Temp/claude/C--Users-wabad-Downloads-FABLE/1deaadd4-ae09-42fa-81bb-b5d4722f5d41/scratchpad/**)",
+      "PowerShell(Get-ChildItem MLOmega_V18_8_1_Evidence_Connected -File | Select-Object Name, Length | Format-Table -AutoSize; Get-ChildItem MLOmega_V18_8_1_Evidence_Connected\\\\src -Recurse -File | Where-Object { $_.FullName -notmatch 'node_modules|__pycache__' } | Select-Object @{n='Path';e={$_.FullName.Replace\\(\"$PWD\\\\MLOmega_V18_8_1_Evidence_Connected\\\\\", ''\\)}}, Length | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem MLOmega_V18_8_1_Evidence_Connected\\\\docs, MLOmega_V18_8_1_Evidence_Connected\\\\scripts, MLOmega_V18_8_1_Evidence_Connected\\\\tests, MLOmega_V18_8_1_Evidence_Connected\\\\MLOmega_Phone_Bridge_V18_8 -Recurse -File | Select-Object @{n='Path';e={$_.FullName.Replace\\(\"$PWD\\\\MLOmega_V18_8_1_Evidence_Connected\\\\\", ''\\)}}, Length | Format-Table -AutoSize)",
+      "Bash(ls src/mlomega_audio_elite/)",
+      "Bash(ls docs/)",
+      "Bash(ls legacy/)",
+      "Bash(du -sh legacy/)",
+      "Bash(find . -iname \"*.sh\")",
+      "Bash(find . -iname \"brainlive_daemon*\" -o -iname \"brainlive_realtime*\" -o -iname \"brainlive_hotloop*\" -o -iname \"brainlive_service*\" -o -iname \"brainlive_sensor_fusion*\" -o -iname \"brainlive_offline_deep_vision*\")",
+      "Bash(find . -iname \"*PHONE_BRIDGE*\")",
+      "Bash(ls MLOmega_Phone_Bridge_V18_8/android/ MLOmega_Phone_Bridge_V18_8/pc/ MLOmega_Phone_Bridge_V18_8/legacy/)",
+      "WebSearch",
+      "WebFetch(domain:docs.xreal.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(python -c ' *)",
+      "Bash(powershell -c \"Get-Content release-manifest-v18_8.json | ConvertFrom-Json | Select-Object version | Format-List\")"
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+[CmdletBinding()]
+param([switch]$Full,[switch]$Bridge,[switch]$Delivery)
+$ErrorActionPreference="Stop";$ProjectRoot=(Resolve-Path $PSScriptRoot).Path;$EnvPath=Join-Path $ProjectRoot ".env";$Python=Join-Path $ProjectRoot ".venv\Scripts\python.exe";Set-Location $ProjectRoot;Get-Content $EnvPath|%{if($_ -match '^\s*#' -or $_ -notmatch '='){return};$x=$_ -split '=',2;if($x[0].Trim()){Set-Item "Env:$($x[0].Trim())" $x[1]}};$env:MLOMEGA_PROJECT_ROOT=$ProjectRoot;$a=@("-m","mlomega_audio_elite.cli","doctor-core-v18-7","--fail");if($Full){$a+=@("--check-models","--check-vectors")};if($Bridge -or $Delivery){$a+="--check-bridge"};if($Delivery){$a+="--check-bridge-delivery"};& $Python @a;exit $LASTEXITCODE

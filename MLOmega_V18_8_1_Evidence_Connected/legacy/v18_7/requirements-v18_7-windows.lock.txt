@@ -1,0 +1,49 @@
+# MLOmega V18.7 core production profile — Windows 11, Python 3.11, NVIDIA CUDA 12.1.
+# Graphiti, Neo4j and Mem0 are intentionally not part of this environment.
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# Bootstrap tooling is pinned too; INSTALL uses these exact versions instead of an unconstrained upgrade.
+pip==24.3.1
+setuptools==75.6.0
+wheel==0.45.1
+
+
+# Keep the torch family coherent. The installer first checks NVIDIA/CUDA before
+# creating a project-local venv, so this never overwrites global Python/Torch.
+torch==2.4.1+cu121
+torchaudio==2.4.1+cu121
+torchvision==0.19.1+cu121
+
+# Core runtime and API
+python-dotenv==1.0.1
+requests==2.32.3
+pydantic==2.9.2
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+pillow==10.4.0
+
+# Audio live / deep
+numpy==1.26.4
+scipy==1.14.1
+pandas==2.2.3
+soundfile==0.12.1
+librosa==0.10.2.post1
+ffmpeg-python==0.2.0
+faster-whisper==1.1.0
+ctranslate2==4.4.0
+whisperx==3.3.1
+pyannote.audio==3.3.2
+speechbrain==1.0.2
+silero-vad==5.1.2
+
+# Brain2 retrieval / local vector memory
+sentence-transformers==3.3.1
+transformers==4.46.3
+accelerate==1.1.1
+qdrant-client==1.12.1
+lancedb==0.17.0
+ollama==0.4.2
+
+# Installer/doctor helpers
+packaging==24.2

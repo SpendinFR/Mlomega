@@ -1,0 +1,922 @@
+{
+  "version": "18.8.1",
+  "profile": "CORE_BRAINLIVE_V18_8_PHONE",
+  "description": "MLOmega V18.8.1 evidence-connected adaptive live, activity-aware bundles, resumable close-day.",
+  "files": [
+    {
+      "path": "src/mlomega_audio_elite/__init__.py",
+      "sha256": "8ecb236b3e236a0027932ba417f90900b6d851ccfbc752695e8e3baba7573952",
+      "bytes": 23
+    },
+    {
+      "path": "src/mlomega_audio_elite/api.py",
+      "sha256": "19e84d07921bed3b37dc5a593784fd18458c5aa7320771b6889b35587d0eb49d",
+      "bytes": 2713
+    },
+    {
+      "path": "src/mlomega_audio_elite/audio_pipeline.py",
+      "sha256": "41777036882082c451eb569bd8415cb611584e12aff0f0e9d0a1462a871736e3",
+      "bytes": 8133
+    },
+    {
+      "path": "src/mlomega_audio_elite/audio_preprocess.py",
+      "sha256": "b7aa15f35e944fc7a22e07dda24a820b42e766828ceed9f56b2b01bc2ba236d9",
+      "bytes": 14395
+    },
+    {
+      "path": "src/mlomega_audio_elite/auto_verification_v14_4.py",
+      "sha256": "5fcccca88cec320708f025b60aee9d1e9f64b0639a0e4f5e7de7b16d81177466",
+      "bytes": 17088
+    },
+    {
+      "path": "src/mlomega_audio_elite/autonomous_v13_4.py",
+      "sha256": "46e0eb98bc8933321d31093e67aa01f6298f7140f4afb0af1cdc9c561108cd2d",
+      "bytes": 22027
+    },
+    {
+      "path": "src/mlomega_audio_elite/behavior_v12.py",
+      "sha256": "f808f36d8449926833d03a16cd2bcb63ff8f88805f04de72dea8f3454d71789d",
+      "bytes": 81776
+    },
+    {
+      "path": "src/mlomega_audio_elite/behavior_v13.py",
+      "sha256": "6c246bfe850a673cbd8fb89f090e6b9ae5ad50ee6051ad3fc2118a1c63f08b57",
+      "bytes": 4267
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_complete_v13.py",
+      "sha256": "3f9435115b5aee6124594362177858f20ae3d0b99f8eca92266851d2327f2d31",
+      "bytes": 45854
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_flow_v13_3.py",
+      "sha256": "aa9dce805c14f3cf72b115c4d755e4c41b0be3c41f393748bac3d7646ff94258",
+      "bytes": 35834
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_life_model_updater_v15_13.py",
+      "sha256": "41c6edd04e08c584a3e71398df157d71f6bbf0431ef975735e4f4e3330e7a607",
+      "bytes": 35015
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_life_model_v15_10.py",
+      "sha256": "5803c9cd5409f6d67ac08ac6c44cd1c7c5eb783324367cc86494f54feb250342",
+      "bytes": 46824
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_longitudinal_cases_v17.py",
+      "sha256": "196acad1c112c18a880e25549730dd54c269e32dac171c95fb14489e1be920e3",
+      "bytes": 48245
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_router_v14_1.py",
+      "sha256": "2a15b143c79572085454acbebbfdc1a87149d046f2500229463f5205a0b07b69",
+      "bytes": 45999
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_router_v14_2.py",
+      "sha256": "2fe4e22cde4929feeb4ea9314168f4bac2d11f4ad23cb0a7a45166db02faba3b",
+      "bytes": 31956
+    },
+    {
+      "path": "src/mlomega_audio_elite/brain2_strict_v13_2.py",
+      "sha256": "0aac98d823050f0cfb5336be470cab7b756e1a47b4e681802d67ae916511cd6b",
+      "bytes": 85390
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_brain2_coordination_v15_12.py",
+      "sha256": "8a7e43c9a25ad4f8ddaa645c38074d45eadf517c686e07133872d0ea175b0204",
+      "bytes": 51888
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_daemon_v15_3.py",
+      "sha256": "e614a1f86483526345ba5881132a9c7bb7084bd8c5c41d9fdd1e7477d95bad2a",
+      "bytes": 51364
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_event_assembler_v15_14.py",
+      "sha256": "4269726a91534f9086c5b84222978a3a9e2327398bb7581ce00a3b88d33c58fc",
+      "bytes": 58069
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_hotloop_v15_6.py",
+      "sha256": "104d6206216595dc1531a7c488f3b3a643965ed30442843f95bf88b4414f23ea",
+      "bytes": 59078
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_invalidation_v15_7.py",
+      "sha256": "77491b9b70a531815047b1fe1e631b6b45d4ae137946f6250a69d0dc6864d02d",
+      "bytes": 21120
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_longitudinal_v15_1.py",
+      "sha256": "546d91108f1f6a6592e996fb58cbae2a53939b54f3a03dca707b33f554c74e11",
+      "bytes": 58348
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_offline_deep_audio_v18_5.py",
+      "sha256": "735ae529bed187333d2ec8c8f9420bd8aaa32958f4e7af8a0473435cc11a3f54",
+      "bytes": 68233
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_offline_deep_vision_v16_1.py",
+      "sha256": "4ce1c8611a29f01d43843d6162cccc49d8ba1e9edba91a397ff4e72d3ae9f679",
+      "bytes": 33952
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_personal_model_v15_9.py",
+      "sha256": "149a749ac59b967e77767d3cf916b0b44f60b3a80ffe691605b0a7a15b55f6b2",
+      "bytes": 33350
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_poststop_deep_flow_v15_15.py",
+      "sha256": "767aa582eca749a7dfc25f1c47a777db7b679bfbbc99c25a5bdc001f44954352",
+      "bytes": 38155
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_readiness_v15_8.py",
+      "sha256": "cba8c9c5f498609a5b574e730e0c36daae05e787e87ba302fdf8367e8f1e8063",
+      "bytes": 4833
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_realtime_v15_2.py",
+      "sha256": "f4e347f84f1c535c0167ebd8f7548b2f9e166123b02cd1867aab65b4370df4d9",
+      "bytes": 27763
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_sensor_fusion_v15_4.py",
+      "sha256": "ea211bc9cee3b1bc9512c3943bdb69ee18ca105a9add6473fc1c3125d956766c",
+      "bytes": 81122
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_service_v15_5.py",
+      "sha256": "97e276271b640d73b48addac099557129c6df9f7fc8185ff38c83e3c0d600e62",
+      "bytes": 90701
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_silent_life_v16_0.py",
+      "sha256": "83d0e275d678b7616516ceab3fc9075094627dce84a346744d80a1a18f01e1b3",
+      "bytes": 26773
+    },
+    {
+      "path": "src/mlomega_audio_elite/brainlive_v15.py",
+      "sha256": "30bd78154eeae0319375f0170ba9e62ffe4010d598db5867f2768c14510556de",
+      "bytes": 80444
+    },
+    {
+      "path": "src/mlomega_audio_elite/clarification_inbox_v14_8.py",
+      "sha256": "b489686051b6a47bb70b91c06691dabe411826b59c7e10f41a807261715c3508",
+      "bytes": 35077
+    },
+    {
+      "path": "src/mlomega_audio_elite/cli.py",
+      "sha256": "1d5b8ebb24132797d3236f782f4e99f108c6c4631aef775b8ea33233e111ca51",
+      "bytes": 100508
+    },
+    {
+      "path": "src/mlomega_audio_elite/config.py",
+      "sha256": "cd9c5a776cf47b6c658b4f2fb5276506f53b5be4b52bd7dcd616bf2f7be6c932",
+      "bytes": 12881
+    },
+    {
+      "path": "src/mlomega_audio_elite/consolidation.py",
+      "sha256": "f12eac1e88ae3ce3f87f8a0685487ebcbf7f728c686abb92d2ffd9166b1a4ada",
+      "bytes": 18726
+    },
+    {
+      "path": "src/mlomega_audio_elite/db.py",
+      "sha256": "e9cc87b62471ac49c042518ae40fbed4c3ef2ee724b3db6bc6a5e3ef5cd4145c",
+      "bytes": 76883
+    },
+    {
+      "path": "src/mlomega_audio_elite/discourse_context.py",
+      "sha256": "74c5519fa0614b0cbdfb6477c5234e51afa738d6ebd9e64a9a8b756ed0d24a03",
+      "bytes": 30805
+    },
+    {
+      "path": "src/mlomega_audio_elite/external_memory.py",
+      "sha256": "27566f9ad8497e635cb13e7a3763e5be0a795c290bfa57b501c8a78c8a52d604",
+      "bytes": 31800
+    },
+    {
+      "path": "src/mlomega_audio_elite/governance_v18.py",
+      "sha256": "da98e1f149acb280117e3a62ae2ed428c0f289c5c522678e9193facb46ab12c1",
+      "bytes": 85369
+    },
+    {
+      "path": "src/mlomega_audio_elite/graph_memory.py",
+      "sha256": "83f35e51bd5beafb8acf3d1b7493ce313271763211b207ff3232e3307441f6c0",
+      "bytes": 2920
+    },
+    {
+      "path": "src/mlomega_audio_elite/ingest.py",
+      "sha256": "edd09b79c4091e1afd970fcd989b74a79eaeab29ac94ec2e3beb0247e528d5be",
+      "bytes": 46434
+    },
+    {
+      "path": "src/mlomega_audio_elite/integrity_v176.py",
+      "sha256": "4e1aa2730a1abddd91376de76d9836b17731712f184be17c1dae563309c1c417",
+      "bytes": 47607
+    },
+    {
+      "path": "src/mlomega_audio_elite/interpersonal_state_v14_6.py",
+      "sha256": "7072ccb8cca43374310ed01687283849f328a159296d7a5822f2e00be8a27bff",
+      "bytes": 39113
+    },
+    {
+      "path": "src/mlomega_audio_elite/life_memory.py",
+      "sha256": "7f464b28a70610ba24ed0f568e0f1f3445006f9d9289be613b31921acb93be24",
+      "bytes": 17733
+    },
+    {
+      "path": "src/mlomega_audio_elite/llm.py",
+      "sha256": "b3b99f08a62f02a45fabd4bc3c4eeb8461b23d712a500cf7cc5649ef7145a74a",
+      "bytes": 13527
+    },
+    {
+      "path": "src/mlomega_audio_elite/llm_contracts_v15_18.py",
+      "sha256": "2031267e4132aa15fe58e5c0d65e67ccb4b27737e79bed34ffcbd3e223be48e2",
+      "bytes": 10733
+    },
+    {
+      "path": "src/mlomega_audio_elite/local_mem0.py",
+      "sha256": "493631e289717ea58633ce3f2e67cb8417316b387f1450bde1a3e3bf47e433ff",
+      "bytes": 3830
+    },
+    {
+      "path": "src/mlomega_audio_elite/memory_correction.py",
+      "sha256": "9a319d0746cbb6570a6650dc310d7feea5d126f0dc5ece8c785c3ae9fc6c6654",
+      "bytes": 14500
+    },
+    {
+      "path": "src/mlomega_audio_elite/memory_foundation.py",
+      "sha256": "c66486b9ab6b39ffac480aeacae4d17ef5035d2306ced72db341cd9c1df05ef7",
+      "bytes": 14089
+    },
+    {
+      "path": "src/mlomega_audio_elite/microscope.py",
+      "sha256": "5e7345fe621d15a19f4ad2c244e64f086880a4adac982c52c86a6ab3a3a0a957",
+      "bytes": 18684
+    },
+    {
+      "path": "src/mlomega_audio_elite/operations_v18_7.py",
+      "sha256": "8133460abaa58732216c323f769fbee50f2ead98f6a86d91f63800a64745d679",
+      "bytes": 28858
+    },
+    {
+      "path": "src/mlomega_audio_elite/operations_v18_8.py",
+      "sha256": "7158ced22a7af5e7ebfa6d0508ad1f7332f10b65d80184f9d0d705e168404aa7",
+      "bytes": 28858
+    },
+    {
+      "path": "src/mlomega_audio_elite/pattern_mirror_v14.py",
+      "sha256": "3df9dc05c6bfb393b1eaf335fcb7770aba405c5a71fe3d46adffa41903fb3302",
+      "bytes": 56532
+    },
+    {
+      "path": "src/mlomega_audio_elite/people_openloops_v14_5.py",
+      "sha256": "3641d5d8cc5eea64200708524e0dd87066f113180fd5442f7d6d90c4a9a82248",
+      "bytes": 43401
+    },
+    {
+      "path": "src/mlomega_audio_elite/proactive_interventions_v14_7.py",
+      "sha256": "5fe13f224e242a444a64f2f717db7076312894800b742abb1b201aa4554e61b2",
+      "bytes": 32708
+    },
+    {
+      "path": "src/mlomega_audio_elite/retrieval.py",
+      "sha256": "53b91b109facb339de5372b21d85e207a44d723002a2c32bc08ab106ba0fe8cb",
+      "bytes": 5262
+    },
+    {
+      "path": "src/mlomega_audio_elite/runtime_v18_7.py",
+      "sha256": "bec4a6326aff49deb9164f9c8302ae59a868e61d470d6b1606dadb2ee50a6444",
+      "bytes": 21565
+    },
+    {
+      "path": "src/mlomega_audio_elite/runtime_v18_8.py",
+      "sha256": "93c3990be8d8f5f6aa3073241f0adce911cf459625360143bcf1624ec41c127e",
+      "bytes": 21565
+    },
+    {
+      "path": "src/mlomega_audio_elite/segmentation.py",
+      "sha256": "88a9719cc929ad628d650de2c905d851e9237d4f0206b82114ca5b7c038f978c",
+      "bytes": 8408
+    },
+    {
+      "path": "src/mlomega_audio_elite/self_model_export_v14_3.py",
+      "sha256": "a96f4084f9b299110e82f201aaaae95bff64cb9940f29f5182ca5b3a32c2839b",
+      "bytes": 30061
+    },
+    {
+      "path": "src/mlomega_audio_elite/sync_jobs.py",
+      "sha256": "98621a87576aaa180dfd8a0837a31b74fd242b9af1f3b6316701a6f491e9962f",
+      "bytes": 10377
+    },
+    {
+      "path": "src/mlomega_audio_elite/utils.py",
+      "sha256": "6176a87bb0cae75d8f7f35bc41ecd89024c62ced5e1ac62b2ccdb83358b71365",
+      "bytes": 4236
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_8_live_policy.py",
+      "sha256": "b337f612813fb77de10715653a919724b00d341c101efcbe6ae306fbb9f716a2",
+      "bytes": 42791
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_autonomous.py",
+      "sha256": "eb30cdf60c6c1cfb470dbaaec9534dc5f69ef9ff636e234a0e4ccab97b1f2612",
+      "bytes": 7255
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_brain2_context.py",
+      "sha256": "9a49186a74ee5703bfbf2036bfff7dfc059fe84087731b985c8d49fbff62565f",
+      "bytes": 12496
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_brain2_flow.py",
+      "sha256": "fa2b396f43d08a9ba8f48ab1c2823f29f92a13f637b963422f3d3d3660d90bfe",
+      "bytes": 23447
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_close_day.py",
+      "sha256": "4cbb1ec0e0e33b54d5a318df333a7163cde10605fc557e03087a6c85df9fe7f1",
+      "bytes": 23577
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_context.py",
+      "sha256": "84f46cae531cd5127faa3aae64a933332f26a16bdb11d0c7de792d35208a5267",
+      "bytes": 14801
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_coordination.py",
+      "sha256": "40b09a3b569b84b38e5ded8e9888231bac50ab0d291373f1db734561483b552d",
+      "bytes": 7860
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_delivery.py",
+      "sha256": "46ad50239b636f931bb31708f47a8b04195ae39dc87d4aeffea2564caa99dfee",
+      "bytes": 7591
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_external.py",
+      "sha256": "ab1d783e11aeb708a6c0d4754a67e4caeae04937c9e627a06a4d8265403c3e98",
+      "bytes": 7904
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_hot_capsule.py",
+      "sha256": "99f8e2bce379494cd4fe8b75c1927b594e813e908f6dcd7b4ba96d4ca0756652",
+      "bytes": 14913
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_interactions.py",
+      "sha256": "68e1b3b32f88081b9db01e829cfab1c3bf5c9359e2d8ad269d20c32d14e98e69",
+      "bytes": 8097
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_legacy_forecasts.py",
+      "sha256": "8984674e774b6eeb484af57e1264ab432efa897b8e6fe643b748a12c3f494837",
+      "bytes": 11942
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_life_model.py",
+      "sha256": "f27a59c861bb5f6d8569fea824286e5bc54b9a1d40e9343f8caa845d6904c736",
+      "bytes": 35379
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_live_decomposition.py",
+      "sha256": "4e78567a580f95f3172dff47e202a0242bd0b0f1a85845740cb236482dc96ab0",
+      "bytes": 16558
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_live_execution.py",
+      "sha256": "abc74888abdc6b332ce225225a8d7111e3fa1bed9b00f44bfb9eddc972af8dd4",
+      "bytes": 6556
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_longitudinal.py",
+      "sha256": "f98bbcbadfbdf40b6dd0b51aee232b271d3f44a78be2d65f629dac295e6502a3",
+      "bytes": 47049
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_migration.py",
+      "sha256": "df3f1fa11ba689320d6947c70742c3b682988432b71bce9df98a8b55893a0fe0",
+      "bytes": 12715
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_owner_scope.py",
+      "sha256": "ae5c04a7ae903d18e4ca64a0c31b5ccbcdab9816c5d2990dc5f649c42618412f",
+      "bytes": 1328
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_personal_model.py",
+      "sha256": "e6e4d7015b1223cd02b111fa45507a3a9884b7c24250cf7e8bd8d9adda6132a4",
+      "bytes": 6736
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_poststop_outputs.py",
+      "sha256": "9ccc67c5b56dd265ce0eacf9eada91078edf6b75c6c50d48d6357d7fd8cb8ad3",
+      "bytes": 31646
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_predictive_retrieval.py",
+      "sha256": "1dd051722b51522503e627d5d2ccf98eef724eb7f739356d132a2e16f4d36ce4",
+      "bytes": 46092
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_release_audit.py",
+      "sha256": "a5d9508fa255d96c4a50f1ce09c1e1149b6198b4b2f224d351474131837f0361",
+      "bytes": 30361
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_replay.py",
+      "sha256": "a791f3a4e9fa5c35e52144d118875e9f9a731f041c61f4c1f998f6d7a68c7460",
+      "bytes": 8047
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_runtime_hardening.py",
+      "sha256": "db4a3ce33cb64109114112e8284083469f583ece7c4a5dd031d23e99e30b7b11",
+      "bytes": 41053
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_sensor_identity.py",
+      "sha256": "43f87a95ddae879bd7f1358c973bc5f0df73c3d88992c29769c3b393da93628b",
+      "bytes": 3344
+    },
+    {
+      "path": "src/mlomega_audio_elite/v18_sync.py",
+      "sha256": "0a748756e197217e291ac68a48a82862d284f3452371f97da7a4cbbdd09ef11a",
+      "bytes": 30505
+    },
+    {
+      "path": "src/mlomega_audio_elite/vector_memory.py",
+      "sha256": "1cbdce035a08ac3cb0445e90e2ade67f630ea0444f62b7f6df0ff1e7c726e8fe",
+      "bytes": 11668
+    },
+    {
+      "path": "src/mlomega_audio_elite/vector_sync.py",
+      "sha256": "0c9ecce0e1c4ce82f937d3cc237ecf465fe68307e0d691d6df520fb9529f6117",
+      "bytes": 34311
+    },
+    {
+      "path": "src/mlomega_audio_elite/voice_identity.py",
+      "sha256": "0a3de779c9fe27379e21912c3e880123ba390609dc7216387484c9e23a2abd48",
+      "bytes": 6432
+    },
+    {
+      "path": "src/mlomega_audio_elite/voice_learning.py",
+      "sha256": "d50c3220328e24effa4711ad0564643aeb3dc71b3933d95565dd7fc2aed6afa2",
+      "bytes": 20744
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/README_BRIDGE_V18_6_RESUMABLE.md",
+      "sha256": "97b6da3a8b461703ca5a17446a28bcf8d0452f1731e666d36661f1d6204b0b30",
+      "bytes": 1148
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/capture_audio_loop.sh",
+      "sha256": "9e45c92e6ce72607bb7182c91f75955e425ff2ee49c56fcc6580fe4b29ed4943",
+      "bytes": 6730
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/capture_gps_loop.sh",
+      "sha256": "19ab6ecae22dc453c7c446d3eff49c9ab84ad42a19fbbfe184b0f806ac87e3e2",
+      "bytes": 921
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/capture_image_loop.sh",
+      "sha256": "ddf7c046e412ef7c46834d44caa9e820760d065ea6e0b5305bd55da57807cf9f",
+      "bytes": 3911
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/install_termux_android.sh",
+      "sha256": "cb006057e188b22ea6753d4f6c7ab4fe3db953a9ee2e94167836593d0f8daa70",
+      "bytes": 799
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/lib_mlomega_android.sh",
+      "sha256": "1c63d48d09da9f891120422e3953331d7af220493d5f5cd878fcf9dc9eef5a49",
+      "bytes": 10015
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/mlomega_android_config.env.example",
+      "sha256": "9c785e175b0f9ac507ead40148a442a44dec8876c129ebac58155ac6c6e19b1e",
+      "bytes": 3004
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/start_mlomega_v17_android_capture.sh",
+      "sha256": "bb94daf23c891c0aea8372a12d3d886a4f6221aae8a4179ab4984f72fd99e8b2",
+      "bytes": 1889
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/start_mlomega_v18_8_android_capture.sh",
+      "sha256": "bb94daf23c891c0aea8372a12d3d886a4f6221aae8a4179ab4984f72fd99e8b2",
+      "bytes": 1889
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/status_mlomega_v17_android_capture.sh",
+      "sha256": "1b1ebc97c254a438466734c9dcb115f59ccbf5be2d9e5717827d02a043cfd0a2",
+      "bytes": 768
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/status_mlomega_v18_8_android_capture.sh",
+      "sha256": "1b1ebc97c254a438466734c9dcb115f59ccbf5be2d9e5717827d02a043cfd0a2",
+      "bytes": 768
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/stop_mlomega_v17_android_capture.sh",
+      "sha256": "cca37220a44b8d9fd9758074edba13eaa303eb4fad54a60c5477db6f17cefe81",
+      "bytes": 2176
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/stop_mlomega_v18_8_android_capture.sh",
+      "sha256": "cca37220a44b8d9fd9758074edba13eaa303eb4fad54a60c5477db6f17cefe81",
+      "bytes": 2176
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/upload_audio_loop.sh",
+      "sha256": "2bc4e6c18fb99cc029ff0307743893c0e6d34b755824d483f458c88b542efa02",
+      "bytes": 1341
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/upload_gps_loop.sh",
+      "sha256": "aa7863ea317de4e6bc6a8cf97c6e9b695202193cb2b0b98ec0508925d6f640e4",
+      "bytes": 1008
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/android/upload_image_loop.sh",
+      "sha256": "39c0697b77b56b2dac28b325205f365002c529f1bccd5bcf2e518f236e70fbe4",
+      "bytes": 1343
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/pc/brainlive_phone_receiver.py",
+      "sha256": "c4c357be3d1a7941f8c54b974b4e6aa696b10e98f16d242a845e7fe0bc2ea34a",
+      "bytes": 46597
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/pc/check_brainlive_phone_receiver.ps1",
+      "sha256": "a4ceca277fa959b56d81d6e609db9ce6c2652ccfeb7d749c6c9c39a05b085422",
+      "bytes": 414
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/pc/install_brainlive_phone_receiver.ps1",
+      "sha256": "a0991a795961122580e3946a56fe4c587c592df9d8a1be59de05bc380e2712ba",
+      "bytes": 576
+    },
+    {
+      "path": "MLOmega_Phone_Bridge_V18_8/pc/run_brainlive_phone_receiver.ps1",
+      "sha256": "73567b1f618d154106fe2b5144431afeef37ea670757c52628fa39e68ef7da41",
+      "bytes": 4179
+    },
+    {
+      "path": "scripts/install_rtx3070_ubuntu.sh",
+      "sha256": "238ee90e671a1121fc557a10aee56a4b0352a52a8bbd6a152b484d5528191c9d",
+      "bytes": 303
+    },
+    {
+      "path": "scripts/load_env.ps1",
+      "sha256": "7c2c2e1a3789a5c2cd57764851bcb43c390da0b63badf5a16f803d419f25eeba",
+      "bytes": 569
+    },
+    {
+      "path": "scripts/windows_first_test.ps1",
+      "sha256": "cdb0115888ca82b9f434be4ba142d44b4b8fa80cb45a4c1894523ad9f31c3600",
+      "bytes": 848
+    },
+    {
+      "path": "scripts/windows_install_all.ps1",
+      "sha256": "936b744fe01f8c9a167cfd287948204daa30c9b09f13d4eac39840b2d6f1dc5d",
+      "bytes": 426
+    },
+    {
+      "path": "docs/ARCHITECTURE_MEMOIRE_ELITE.md",
+      "sha256": "23538cd38cbe08da8d367b931957ba9df01ea4d5677d02dc6babf80b32985c6b",
+      "bytes": 3098
+    },
+    {
+      "path": "docs/COMPLETE_MEMORY_CONTRACT_V3_2_4.md",
+      "sha256": "c48ccea66069693e9071a3c3d83531a0ab904a7981dd020d6d62c3a0bd46998c",
+      "bytes": 1299
+    },
+    {
+      "path": "docs/ELITE_STACK.md",
+      "sha256": "528e928c1a5a8ba16617e445835d8e0da1be39c68c0e2a23774952474f3ade34",
+      "bytes": 1676
+    },
+    {
+      "path": "docs/GLOBAL_DISCOURSE_CONTEXT_V3_2_3.md",
+      "sha256": "762b0a3b22a3156f7d27a944948b73be1f488414fcfc0e3ab7136550e20c7beb",
+      "bytes": 1133
+    },
+    {
+      "path": "docs/GUIDE_DEMARRAGE_COMPLET_V13_3.md",
+      "sha256": "2cb73bac1a5efac71c005a033c7585afa3839874c90bb1ce5c2d1f4d5ce306eb",
+      "bytes": 11589
+    },
+    {
+      "path": "docs/GUIDE_DEMARRAGE_COMPLET_V14_4.md",
+      "sha256": "b7842df5a2f73ae3de11bdb0ddd5116dd0f52aac1b22101fc5bf5b248f9d741f",
+      "bytes": 3289
+    },
+    {
+      "path": "docs/INPUT_TRANSCRIPT_SCHEMA.md",
+      "sha256": "09701b9cffaf895254796cac19f4f7781d50d0ffdaa51e6526938a2ab94c186b",
+      "bytes": 827
+    },
+    {
+      "path": "docs/LIFE_STREAM_MEMORY_FOUNDATION_V3_3.md",
+      "sha256": "93a42f12421616d3520d8b477a859100d23f14eb6fcc5ecc759154b146cfaeb0",
+      "bytes": 3768
+    },
+    {
+      "path": "docs/MEMORY_FOUNDATION_V3_2.md",
+      "sha256": "738c57043d0b0d8ccd9ee1c89d3d042801ae7bc379827e75c873374578925b6e",
+      "bytes": 2339
+    },
+    {
+      "path": "docs/NEXT_STEPS.md",
+      "sha256": "2705d36238f7069ddea2ac2567031aef85ab997c3c5f4c1e11ae59630d38cf51",
+      "bytes": 1252
+    },
+    {
+      "path": "docs/PRECISE_AUDIO_CONTEXT_V3_2_2.md",
+      "sha256": "c2f0c1a41b03da4ac7bfb422641b7306da8d38243e1b1821a42ae8d895b13c99",
+      "bytes": 1524
+    },
+    {
+      "path": "docs/RUN_RTX3070.md",
+      "sha256": "b99af883d147afe5fba15802adcc016356acb08d24d730970e653d7d7972ca01",
+      "bytes": 663
+    },
+    {
+      "path": "docs/V12_BRAIN_2_FOUNDATION.md",
+      "sha256": "6b5504bed7ea8ae3858a11248fe55efa0d78dfe8cc6680998c9a0ca9300a9750",
+      "bytes": 2501
+    },
+    {
+      "path": "docs/V12_COMPLETE_BRAIN2_SYSTEM.md",
+      "sha256": "33a0a7cd91afc9de785aac22a508a1835f3e1757434c16d5c1ac71c094ea13db",
+      "bytes": 4488
+    },
+    {
+      "path": "docs/V13_1_COMPLETE_FINAL_PLAN_COVERAGE.md",
+      "sha256": "98f0d9b977ac72dac44b0121f7c7784856510d889239e3c13b50492ac72b48ab",
+      "bytes": 3235
+    },
+    {
+      "path": "docs/V13_2_STRICT_FINAL.md",
+      "sha256": "b75f5fa762e1ba3ae228f3bb76b443df1847ddc523077547aec8d60c85a5ab30",
+      "bytes": 1902
+    },
+    {
+      "path": "docs/V13_4_AUTONOMOUS_INSIGHT_LOOP.md",
+      "sha256": "6899fb3e926d47a6e8c172613c4e6b19cc93f54df47610e9b7b066aa42e819b5",
+      "bytes": 1883
+    },
+    {
+      "path": "docs/V13_BRAIN2_COMPLETE.md",
+      "sha256": "ff4f55febdb21c1e1037e7b23fe738d3ece9e355b8c8313b43899e0b9a72fc01",
+      "bytes": 3086
+    },
+    {
+      "path": "docs/V14_1_ROUTER_SELECTION_FINAL.md",
+      "sha256": "4d234aeab98ea9e40137e005fec00348206a007e3d0fcc8cf1c1ec8ae36fa79b",
+      "bytes": 3080
+    },
+    {
+      "path": "docs/V14_2_VECTOR_QUALITY_FINAL.md",
+      "sha256": "152b5d196f7131d93e5000eb04492932b72b9e652e1f0cfb67becbce11ed57e1",
+      "bytes": 2950
+    },
+    {
+      "path": "docs/V14_3_SELF_MODEL_SCHEDULER_FINAL.md",
+      "sha256": "1b65a8bf3bcfd8560b66df0f64f01d2902c92c1b03003b931614986e362f22a3",
+      "bytes": 1987
+    },
+    {
+      "path": "docs/V14_4_AUTO_VERIFICATION_BRIDGE_FINAL.md",
+      "sha256": "5eb66d1e6dd8b0be39c4943177c5b2b5998d6e0a77396d82778682be916b84c7",
+      "bytes": 1695
+    },
+    {
+      "path": "docs/V14_5_PEOPLE_OPENLOOPS_FINAL.md",
+      "sha256": "8e91a447b0f27551b825e8b4f1df70f1ed6ccf9d894222511ec2d0c5b96d4b87",
+      "bytes": 2234
+    },
+    {
+      "path": "docs/V14_6_INTERPERSONAL_STATE_FINAL.md",
+      "sha256": "8e414fac4db9812aeb4ca5737acc334a2a1a3b39b54489134b09ed6cf2c66190",
+      "bytes": 2490
+    },
+    {
+      "path": "docs/V14_7_PROACTIVE_INTERVENTION_FINAL.md",
+      "sha256": "187dce74154b6e64d952e58997b65c781e76a04b815c911701b2169bbd57f701",
+      "bytes": 1876
+    },
+    {
+      "path": "docs/V14_8_CLARIFICATION_INBOX_FINAL.md",
+      "sha256": "c8f5837a6c180e4d5069d04a02f49a3c808d5cd91700eee07641b64c5ace4027",
+      "bytes": 2266
+    },
+    {
+      "path": "docs/V14_PATTERN_MIRROR_FINAL.md",
+      "sha256": "78c688ef45c63fb214ac11be422ae1f13d7e91e34849a169783d981682604c01",
+      "bytes": 2669
+    },
+    {
+      "path": "docs/V15_1_BRAINLIVE_LONGITUDINAL_FINAL.md",
+      "sha256": "8e0cf428cef956e4f83adb2f8b7b456b79a2d0ec2942972bae6d21b3e4a4726a",
+      "bytes": 2657
+    },
+    {
+      "path": "docs/V15_BRAINLIVE_VISION_FINAL.md",
+      "sha256": "533b323d496ea8c998b956667a14b42890bf384989099fe3c1841e45c10cc68c",
+      "bytes": 4841
+    },
+    {
+      "path": "docs/V17_6_IMPLEMENTATION_AND_VALIDATION.md",
+      "sha256": "5fd46d70a21712fb6b127b6c9cb0724d5d67fac7b4c225c3439b7d3375baeaed",
+      "bytes": 4624
+    },
+    {
+      "path": "docs/V17_6_INTEGRITY_FOUNDATION.md",
+      "sha256": "dfac312b3835812514892aa75596a9a0c7d21f589a27f81a5ad94b5e46443eec",
+      "bytes": 3270
+    },
+    {
+      "path": "docs/V17_TO_V18_REMEDIATION_PROGRAM.md",
+      "sha256": "f75a00852c36ed96672dafcc4220ffc3aae48bc55e728726c5c419a9742766b5",
+      "bytes": 8994
+    },
+    {
+      "path": "docs/V18_1_PHONE_BRIDGE_CONTRACT.md",
+      "sha256": "e88320323953f600a96557e61b86380ddacf86acb97eeff22b5546a8789e3f55",
+      "bytes": 1949
+    },
+    {
+      "path": "docs/V18_8_PHONE_BRIDGE_CONTRACT.md",
+      "sha256": "9066825385bbc0d866e43bf84174521f653d93885abae5a0e915ddbed4c3fc58",
+      "bytes": 906
+    },
+    {
+      "path": "docs/V18_RC5_DENSE_PREDICTIVE_QDRANT.md",
+      "sha256": "c34b000186be21b463d3134b6c256e8b39ce59408c61817f5d67f8f70d97bd6e",
+      "bytes": 4347
+    },
+    {
+      "path": "docs/WINDOWS_LOCAL_SETUP_V3_3_3.md",
+      "sha256": "852a86cd2640b034a05da90361bcdf0fa10c6d51307b7d2a45633f7a6384a69d",
+      "bytes": 3036
+    },
+    {
+      "path": ".env.core-v18_8.template",
+      "sha256": "ed30be1188c877098124b27edbafdf05619b4802fa689e2527e79135c28695a3",
+      "bytes": 3961
+    },
+    {
+      "path": ".env.example",
+      "sha256": "a43f80c0c7039d6df3795d300d0466c7e4f75249911da83f19f95d3e37ed1d2d",
+      "bytes": 2346
+    },
+    {
+      "path": ".env.windows.example",
+      "sha256": "db9ab91d14fd448c3bf24c9a8ca52e4ad672f1d3ec05c8b72fedb28ec118c560",
+      "bytes": 2986
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "063587c8e8ab7721d0c1dfc5bd108984f61cabfe8e5ed09f50dc97e1aae74392",
+      "bytes": 355
+    },
+    {
+      "path": "DOCTOR_MLOMEGA_V18_8.ps1",
+      "sha256": "a7431e743fa64ba5b88d2e6401c8a2067940c42db8d6b37571832021ec66cc74",
+      "bytes": 705
+    },
+    {
+      "path": "EXPORT_PHONE_CONFIG_V18_8.ps1",
+      "sha256": "d331e8d3d07fc5ca192aa5d433cdeb63c505049aee36b7dcaa2e83badcb83e0d",
+      "bytes": 1873
+    },
+    {
+      "path": "GUIDE_INSTALL_MLOMEGA_V18_8_RUNTIME.md",
+      "sha256": "204b53bd508cdb7899d239805e9bb4f3bf61a05f7642f88b3285f3f7500c5402",
+      "bytes": 7944
+    },
+    {
+      "path": "GUIDE_MLOMEGA_V18_8_INSTALL_RUN_RESUME.docx",
+      "sha256": "068d7cfa55d2c61577ee1952b29ed8d67cafd756c4f773507494cc9d79b8052c",
+      "bytes": 41369
+    },
+    {
+      "path": "GUIDE_MLOMEGA_V18_8_INSTALL_RUN_RESUME.pdf",
+      "sha256": "f49e35dfee34a7103fa756fe86cc2b5157f20fabf437a558662a4ed11ff6caf3",
+      "bytes": 99090
+    },
+    {
+      "path": "INSTALL_MLOMEGA_V18_8_WINDOWS.ps1",
+      "sha256": "9d0840b24ee50641babfc0302b0d697d7a92f394e7a6275e48ad423bd30f5d8c",
+      "bytes": 37084
+    },
+    {
+      "path": "INSTALL_WINDOWS.bat",
+      "sha256": "ada4dd1e0dd35dee293f97d6aa647b7e2a3247e8ca3a198d8e784b124b1b0859",
+      "bytes": 140
+    },
+    {
+      "path": "PROJECT_DOCTRINE.md",
+      "sha256": "e7c55419f7885813ea76286aec4be0a4bb303641b702faacbe5c84dfad47c138",
+      "bytes": 1652
+    },
+    {
+      "path": "README.md",
+      "sha256": "8311c5a51073ea895a8dc689f785e53695d66cf03021ae06b073ff7c02473d75",
+      "bytes": 1085
+    },
+    {
+      "path": "README_START_HERE_V18_8.md",
+      "sha256": "11d587ed4e5ce1adc62409d8e2d847f00a89ecb2e4fb7c33f76c2e4bbe3fd1b9",
+      "bytes": 1913
+    },
+    {
+      "path": "RESUME_MLOMEGA_V18_8.ps1",
+      "sha256": "53ef12966ca60fa688a6e1095c99ef49f52eae12a8e57e542312a1cd32852848",
+      "bytes": 5725
+    },
+    {
+      "path": "RUN_FIRST_TEST.bat",
+      "sha256": "9c03a69275f2318a0a8bc502bba0ec388c467080b7a971670fdbf34c407ac2d7",
+      "bytes": 164
+    },
+    {
+      "path": "RUN_MLOMEGA_V18_8.ps1",
+      "sha256": "03c18c4cb256b9c42e28852fb7a94668dadd891ccff8afc95d941f4218335f45",
+      "bytes": 12781
+    },
+    {
+      "path": "STOP_MLOMEGA_V18_8.ps1",
+      "sha256": "05019353194fa9f68fc440294339b9d4824ad06bf361a003d87cad65c8304ced",
+      "bytes": 2283
+    },
+    {
+      "path": "V18_8_RELEASE_NOTES.md",
+      "sha256": "835e506dca98bb4b2a2b69628957e93aa9db0f5f2e7b3ce72b2f93e1461fad14",
+      "bytes": 2371
+    },
+    {
+      "path": "V18_8_TEST_REPORT.md",
+      "sha256": "2405a666f5a9ae0a842de1481f1cb3cd7ca232e17db1041ffab2885ec1198e6a",
+      "bytes": 977
+    },
+    {
+      "path": "VERSION",
+      "sha256": "6b49da220ca755377a7fbd8751b2b1a75f530f7fe4a5cb8a595e1329deca5300",
+      "bytes": 96
+    },
+    {
+      "path": "docker-compose.core-v18_8.yml",
+      "sha256": "cff6262b365004f936deb760b31d9f77ffae56c2167d7c5d7817d474ef912b59",
+      "bytes": 327
+    },
+    {
+      "path": "docker-compose.yml",
+      "sha256": "cff6262b365004f936deb760b31d9f77ffae56c2167d7c5d7817d474ef912b59",
+      "bytes": 327
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "8a7f4d2e2b53594270bce12e510ec198964ce2956472b371797580db8e0c65a3",
+      "bytes": 2081
+    },
+    {
+      "path": "pytest.ini",
+      "sha256": "bb7828f3bdc24bf59f08c1eb7786114a213d36f04e7a9a43e3799a80e7ef85b0",
+      "bytes": 58
+    },
+    {
+      "path": "requirements-api.txt",
+      "sha256": "e157e25a43a864bcccf615305a8a82fc5132dd2e62fca56a036f906d4b91fd03",
+      "bytes": 63
+    },
+    {
+      "path": "requirements-elite-audio.txt",
+      "sha256": "8e9976310bececf8880492516f4168ae87c6015e8d84dd59e2d524558fe64720",
+      "bytes": 103
+    },
+    {
+      "path": "requirements-rtx3070.txt",
+      "sha256": "51a10fb615214d8a388e772cbd78348ff9ee73acb70cac1681919f5b5bf0aa27",
+      "bytes": 670
+    },
+    {
+      "path": "requirements-v18_8-windows.lock.txt",
+      "sha256": "4ae378360cbdd6f5fc7ff2f9858ccc4d0074b7905c106977d6f6cf8356fcda0e",
+      "bytes": 1208
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "102eb46878d088ad048939ded453c3905e38af883822a199943d50306828b2cb",
+      "bytes": 28
+    }
+  ]
+}

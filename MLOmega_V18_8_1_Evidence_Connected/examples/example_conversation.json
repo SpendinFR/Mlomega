@@ -1,0 +1,62 @@
+{
+  "metadata": {
+    "conversation_id": "example_memorylight_multi_context",
+    "title": "Deux moments autour de MemoryLight Omega",
+    "started_at": "2026-06-02T18:00:00+02:00",
+    "ended_at": "2026-06-03T00:10:00+02:00",
+    "topic": "MemoryLight Omega",
+    "channel": "audio/transcript",
+    "participants": [
+      "me",
+      "Sarah",
+      "assistant"
+    ],
+    "speaker_map": {
+      "SPEAKER_00": "me",
+      "SPEAKER_01": "Sarah",
+      "SPEAKER_02": "assistant"
+    },
+    "relationship_context": {
+      "Sarah": "amie / discussion vision projet",
+      "assistant": "assistant technique / architecte mémoire"
+    }
+  },
+  "turns": [
+    {
+      "speaker": "SPEAKER_00",
+      "start": 0.0,
+      "end": 8.0,
+      "text": "Je crois que MemoryLight peut devenir plus qu'une app, une mémoire personnelle qui garde tout ce que je dis et pense."
+    },
+    {
+      "speaker": "SPEAKER_01",
+      "start": 8.1,
+      "end": 14.0,
+      "text": "Tu veux dire comme une archive de ta vie ou un assistant qui comprend vraiment tes décisions ?"
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 14.1,
+      "end": 28.0,
+      "text": "Justement c'est ça humain 2.0. Il faut que ça voie les patterns cachés, même les expressions que j'utilise souvent et pourquoi je les dis à ce moment."
+    },
+    {
+      "speaker": "SPEAKER_02",
+      "start": 21000.0,
+      "end": 21008.0,
+      "text": "On peut faire un prototype simple avec un index et quelques résumés."
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 21008.1,
+      "end": 21025.0,
+      "text": "T'as pas compris, je parle du projet du siècle. Je ne veux pas une mémoire simple, je veux que chaque mot, chaque réaction, chaque idée soit décortiquée."
+    },
+    {
+      "speaker": "SPEAKER_00",
+      "start": 21100.0,
+      "end": 21120.0,
+      "text": "Je peux reparler de la même chose avec Sarah ou avec quelqu'un d'autre et ma réflexion peut changer ou rester dans la même boucle. C'est ça qu'il faut classer pour presque prédire l'avenir."
+    }
+  ]
+}

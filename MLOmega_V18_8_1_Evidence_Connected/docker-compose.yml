@@ -1,0 +1,11 @@
+# V18.8 core profile: Qdrant only. No Neo4j, Graphiti, Mem0 or duplicate API port.
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.6
+    container_name: mlomega-v18-7-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
