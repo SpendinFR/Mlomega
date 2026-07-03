@@ -1,0 +1,18 @@
+{
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "17.0.3",
+    "com.unity.xr.management": "4.5.0",
+    "com.unity.xr.core-utils": "2.3.0",
+    "com.unity.inputsystem": "1.11.2",
+    "com.unity.textmeshpro": "3.0.9",
+    "com.unity.ugui": "2.0.0",
+    "com.unity.modules.androidjni": "1.0.0",
+    "com.unity.modules.jsonserialize": "1.0.0",
+    "com.unity.modules.unitywebrequest": "1.0.0",
+    "com.unity.modules.imageconversion": "1.0.0",
+    "com.unity.modules.subsystems": "1.0.0",
+
+    "_comment_xreal": "XREAL SDK 3.1.0 is proprietary and is NOT committed. Download com.xreal.xr.tar.gz from https://developer.xreal.com/download and place it at apps/xr-mobile/Packages/xreal-sdk/com.xreal.xr.tar.gz (git-ignored). The line below resolves that local tarball via UPM 'file:' protocol. See README.md.",
+    "com.xreal.xr": "file:xreal-sdk/com.xreal.xr.tar.gz"
+  }
+}
