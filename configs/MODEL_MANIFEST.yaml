@@ -1,0 +1,15 @@
+models:
+  live_llm:
+    provider: ollama
+    default: qwen2.5:3b-instruct-q4_K_M
+    license: model-card-required
+    max_vram_mb: 3072
+  deep_llm:
+    provider: ollama
+    default: qwen3.5:9b-q4_K_M
+    license: model-card-required
+    phase: nocturne
+  detector:
+    provider: onnx_local
+    default: yolox-nano.onnx
+    license: Apache-2.0
