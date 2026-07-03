@@ -1,0 +1,133 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "contracts_version": {
+      "default": "v19.0",
+      "title": "Contracts Version",
+      "type": "string"
+    },
+    "ui_intent_id": {
+      "title": "Ui Intent Id",
+      "type": "string"
+    },
+    "producer": {
+      "enum": [
+        "ultralive",
+        "visionrt",
+        "brainlive"
+      ],
+      "title": "Producer",
+      "type": "string"
+    },
+    "source_frame_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Frame Id"
+    },
+    "target_track_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Track Id"
+    },
+    "entity_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entity Id"
+    },
+    "component": {
+      "title": "Component",
+      "type": "string"
+    },
+    "anchor": {
+      "additionalProperties": true,
+      "title": "Anchor",
+      "type": "object"
+    },
+    "content": {
+      "additionalProperties": true,
+      "title": "Content",
+      "type": "object"
+    },
+    "truth_level": {
+      "enum": [
+        "observed",
+        "probable",
+        "remembered",
+        "inferred",
+        "replay"
+      ],
+      "title": "Truth Level",
+      "type": "string"
+    },
+    "confidence": {
+      "title": "Confidence",
+      "type": "number"
+    },
+    "priority": {
+      "title": "Priority",
+      "type": "integer"
+    },
+    "ttl_ms": {
+      "title": "Ttl Ms",
+      "type": "integer"
+    },
+    "ui_hint": {
+      "additionalProperties": true,
+      "title": "Ui Hint",
+      "type": "object"
+    },
+    "evidence_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Refs",
+      "type": "array"
+    },
+    "delivery_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivery Id"
+    }
+  },
+  "required": [
+    "ui_intent_id",
+    "producer",
+    "component",
+    "anchor",
+    "content",
+    "truth_level",
+    "confidence",
+    "priority",
+    "ttl_ms"
+  ],
+  "title": "UIIntent",
+  "type": "object"
+}

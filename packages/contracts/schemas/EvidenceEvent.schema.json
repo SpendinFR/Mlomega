@@ -1,0 +1,92 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "contracts_version": {
+      "default": "v19.0",
+      "title": "Contracts Version",
+      "type": "string"
+    },
+    "event_type": {
+      "title": "Event Type",
+      "type": "string"
+    },
+    "occurred_at": {
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "entity": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entity"
+    },
+    "observation": {
+      "additionalProperties": true,
+      "title": "Observation",
+      "type": "object"
+    },
+    "place": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Place"
+    },
+    "truth_level": {
+      "enum": [
+        "observed",
+        "inferred",
+        "consolidated",
+        "probable",
+        "remembered"
+      ],
+      "title": "Truth Level",
+      "type": "string"
+    },
+    "confidence": {
+      "title": "Confidence",
+      "type": "number"
+    },
+    "evidence": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "provenance": {
+      "additionalProperties": true,
+      "title": "Provenance",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_type",
+    "occurred_at",
+    "session_id",
+    "observation",
+    "truth_level",
+    "confidence",
+    "provenance"
+  ],
+  "title": "EvidenceEvent",
+  "type": "object"
+}

@@ -1,0 +1,72 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "contracts_version": {
+      "default": "v19.0",
+      "title": "Contracts Version",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "source_frame_id": {
+      "title": "Source Frame Id",
+      "type": "string"
+    },
+    "entities": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "relations": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Relations",
+      "type": "array"
+    },
+    "changes": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Changes",
+      "type": "array"
+    },
+    "map_quality": {
+      "default": 0.0,
+      "title": "Map Quality",
+      "type": "number"
+    },
+    "evidence_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Refs",
+      "type": "array"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    }
+  },
+  "required": [
+    "session_id",
+    "source_frame_id"
+  ],
+  "title": "SceneDelta",
+  "type": "object"
+}
