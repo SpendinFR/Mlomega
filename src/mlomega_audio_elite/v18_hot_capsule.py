@@ -232,6 +232,10 @@ def build_hot_capsule_payload(
         "manifest": base_manifest,
         "fused_situation": _compact_fused(fused),
         "router": _compact_router(route),
+        "hot_scene_context": {
+            "self_schema_hot": _compact_rows(source_manifest.get("self_schema_hot") or [], item_limit=5, text_limit=260),
+            "scene_focus": _limit(source_manifest.get("scene_focus"), 260),
+        },
         "target_ms": max(1, int(target_ms)),
         "input_budget_chars": budget,
         "output_budget_tokens": output_budget,
@@ -295,6 +299,13 @@ def build_hot_capsule_payload(
         summary = str(payload["episode"].get("summary") or "")
         if summary:
             payload["episode"]["summary"] = _limit(summary, max(0, len(summary) - 160))
+            return True
+        hs = payload.get("hot_scene_context") or {}
+        if hs.get("self_schema_hot"):
+            hs["self_schema_hot"].pop(0)
+            return True
+        if hs.get("scene_focus"):
+            hs["scene_focus"] = ""
             return True
         for collection in ("speech", "vision", "people"):
             values = payload["fused_situation"].get(collection) or []

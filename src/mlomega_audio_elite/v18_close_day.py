@@ -99,6 +99,10 @@ def _status_ok(result: Any, *, stage_name: str) -> bool:
         # the V15.10 status in ``bootstrap``.
         "life_model": {"llm_patch_ready", "ok", "completed", "active"},
         "live_ready": {"active", "ok", "completed", "llm_ready"},
+        "visual_consolidation": {"completed", "ok"},
+        "outcome_resolution": {"completed", "ok"},
+        "prediction_emission": {"completed", "ok"},
+        "self_schema": {"completed", "ok"},
     }
     if stage_name == "life_model" and result.get("mode") == "bootstrap_v15_10":
         bootstrap = result.get("bootstrap") or {}
@@ -113,6 +117,10 @@ def _stage_identifier(name: str, result: dict[str, Any]) -> str:
         "coordination": ("run_id",),
         "life_model": ("patch_run_id",),
         "live_ready": ("export_id",),
+        "visual_consolidation": ("summary_id",),
+        "outcome_resolution": ("count",),
+        "prediction_emission": ("count",),
+        "self_schema": ("count",),
     }
     for key in keys.get(name, ()):
         if result.get(key):
@@ -121,6 +129,8 @@ def _stage_identifier(name: str, result: dict[str, Any]) -> str:
         bootstrap = result.get("bootstrap") or {}
         if isinstance(bootstrap, dict) and bootstrap.get("export_id"):
             return f"life_model:{bootstrap['export_id']}"
+    if result.get("stage") or name in {"visual_consolidation", "outcome_resolution", "prediction_emission", "self_schema"}:
+        return f"{name}:{stable_id(name, result.get('summary_id'), result.get('count'), result.get('package_date'))}"
     raise StageGateError(f"close-day {name} returned no durable identifier")
 
 
@@ -401,6 +411,13 @@ def close_brainlive_day(
         if not bool((post_gate or {}).get("eligible")):
             raise StageGateError("close-day blocked: the session post-stop cleanup gate is not eligible")
 
+        def do_visual_consolidation() -> dict[str, Any]:
+            from .v19_visual_consolidation import run_visual_consolidation
+            return run_visual_consolidation(person_id=person_id, package_date=day, live_session_id=ctx.live_session_id)
+        heartbeat_execution_lease(execution_lease)
+        visual_consolidation = _run_stage(run_id=run_id, name="visual_consolidation", fn=do_visual_consolidation)
+        result["stages"]["visual_consolidation"] = visual_consolidation
+
         def do_longitudinal() -> dict[str, Any]:
             from .brain2_longitudinal_cases_v17 import run_longitudinal_consolidation
             return run_longitudinal_consolidation(person_id=person_id, period="day", run_date=day, use_llm=use_llm, run_periodic_mirror_layer=False, force_cases=False)
@@ -424,6 +441,27 @@ def close_brainlive_day(
         life = _run_stage(run_id=run_id, name="life_model", fn=do_life_model)
         result["stages"]["life_model"] = life
 
+        def do_outcome_resolution() -> dict[str, Any]:
+            from .v19_outcome_watcher import resolve_prediction_outcomes
+            return resolve_prediction_outcomes(person_id=person_id, package_date=day)
+        heartbeat_execution_lease(execution_lease)
+        outcome_resolution = _run_stage(run_id=run_id, name="outcome_resolution", fn=do_outcome_resolution)
+        result["stages"]["outcome_resolution"] = outcome_resolution
+
+        def do_prediction_emission() -> dict[str, Any]:
+            from .v19_prediction_loop import emit_daily_predictions
+            return emit_daily_predictions(person_id=person_id, package_date=day)
+        heartbeat_execution_lease(execution_lease)
+        prediction_emission = _run_stage(run_id=run_id, name="prediction_emission", fn=do_prediction_emission)
+        result["stages"]["prediction_emission"] = prediction_emission
+
+        def do_self_schema() -> dict[str, Any]:
+            from .v19_self_schema import rebuild_self_schema
+            return rebuild_self_schema(person_id=person_id)
+        heartbeat_execution_lease(execution_lease)
+        self_schema = _run_stage(run_id=run_id, name="self_schema", fn=do_self_schema)
+        result["stages"]["self_schema"] = self_schema
+
         def do_live_ready() -> dict[str, Any]:
             from .brainlive_personal_model_v15_9 import build_brain2_live_personal_model
             return build_brain2_live_personal_model(person_id=person_id, use_llm=use_llm, timeout=cfg.poststop_llm_timeout_s, limit=80)
@@ -431,10 +469,10 @@ def close_brainlive_day(
         live_ready = _run_stage(run_id=run_id, name="live_ready", fn=do_live_ready)
         result["stages"]["live_ready"] = live_ready
 
-        expected = [_stage_identifier("post_stop", post), _stage_identifier("longitudinal", longitudinal), _stage_identifier("coordination", coordination), _stage_identifier("life_model", life), _stage_identifier("live_ready", live_ready)]
+        expected = [_stage_identifier("post_stop", post), _stage_identifier("visual_consolidation", visual_consolidation), _stage_identifier("longitudinal", longitudinal), _stage_identifier("coordination", coordination), _stage_identifier("life_model", life), _stage_identifier("outcome_resolution", outcome_resolution), _stage_identifier("prediction_emission", prediction_emission), _stage_identifier("self_schema", self_schema), _stage_identifier("live_ready", live_ready)]
         output = record_output_manifest(run_id=run_id, person_id=person_id, expected=expected, observed=list(expected), reason="close_day_retention_and_live_ready_check_v18_7")
         update_run(run_id, status="completed")
-        cleanup = assert_cleanup_eligible(run_id=run_id, person_id=person_id, required_stages=["post_stop", "longitudinal", "coordination", "life_model", "live_ready"])
+        cleanup = assert_cleanup_eligible(run_id=run_id, person_id=person_id, required_stages=["post_stop", "visual_consolidation", "longitudinal", "coordination", "life_model", "outcome_resolution", "prediction_emission", "self_schema", "live_ready"])
         result.update(status="completed", output_manifest=output, cleanup={**cleanup, "post_stop_run_id": post_stop_run_id})
         _save_close_day(close_day_id=run_id, ctx=ctx, status="completed", post_stop_run_id=post_stop_run_id, cleanup_eligible=True, result=result)
     except Exception as exc:

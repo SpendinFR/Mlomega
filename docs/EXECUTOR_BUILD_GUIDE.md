@@ -189,31 +189,31 @@ CLI : `brainlive-close-day`, `brainlive-resume-close-day`, `brainlive-deep-visio
 ## 3. Étapes — LOT 1 (Fondation)
 
 **[x] E1. Squelette monorepo.**
-Statut : terminé — commit : 42a810a — tests : pytest MLOmega_V18_8_1_Evidence_Connected/tests/test_v18_8_1_evidence_connected.py (6 passed) Créer l'arborescence handoff §3.1 ; copier `MLOmega_V18_8_1_Evidence_Connected` → `src/` + fichiers racine nécessaires ; vérifier que `pytest tests/test_v18_8_1_evidence_connected.py` passe AVANT toute modification (baseline). Geler `runtime_v18_7`/`operations_v18_7` (en-tête « gelé, ne pas diverger de v18_8 »).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : pytest MLOmega_V18_8_1_Evidence_Connected/tests/test_v18_8_1_evidence_connected.py (6 passed) Créer l'arborescence handoff §3.1 ; copier `MLOmega_V18_8_1_Evidence_Connected` → `src/` + fichiers racine nécessaires ; vérifier que `pytest tests/test_v18_8_1_evidence_connected.py` passe AVANT toute modification (baseline). Geler `runtime_v18_7`/`operations_v18_7` (en-tête « gelé, ne pas diverger de v18_8 »).
 
 **[x] E2. Contrats.**
-Statut : terminé — commit : bcbac85 — tests : pytest tests/v19/test_contracts.py (2 passed) `packages/contracts/schemas/*.schema.json` (8 contrats handoff §3.4, champ `contracts_version` partout) → modèles pydantic v2 générés/écrits dans `packages/contracts/python/` → stubs C# dans `csharp/`. Test round-trip python→JSON→python pour chaque contrat. Aucune dépendance vers le cœur ni vers un SDK.
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : pytest tests/v19/test_contracts.py (2 passed) `packages/contracts/schemas/*.schema.json` (8 contrats handoff §3.4, champ `contracts_version` partout) → modèles pydantic v2 générés/écrits dans `packages/contracts/python/` → stubs C# dans `csharp/`. Test round-trip python→JSON→python pour chaque contrat. Aucune dépendance vers le cœur ni vers un SDK.
 
 **[x] E3. SessionHub**
-Statut : terminé — commit : 2da84fc — tests : pytest tests/v19/test_sessionhub.py (2 passed) (`services/live-pc/sessionhub.py`). Sessions (`session_id` = uuid horodaté, jamais réutilisé), ClockSync (échange de timestamps monotones, offset stocké par session), token de session éphémère émis à l'appairage (remplace le token statique pour le canal XR ; le bridge V18.8 existant garde le sien). Test : deux clients simulés, offsets cohérents.
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : pytest tests/v19/test_sessionhub.py (2 passed) (`services/live-pc/sessionhub.py`). Sessions (`session_id` = uuid horodaté, jamais réutilisé), ClockSync (échange de timestamps monotones, offset stocké par session), token de session éphémère émis à l'appairage (remplace le token statique pour le canal XR ; le bridge V18.8 existant garde le sien). Test : deux clients simulés, offsets cohérents.
 
 **[x] E4. VideoIngress + gateway** (`services/live-pc/gateway.py`). Interface `VideoIngress` (async itérateur de `(frame_bgr, FrameEnvelope)`), impl `AiortcIngress`. Queue = 1 : variable « dernière frame » + compteur de drops, jamais de liste. Bench intégré : P50/P95 décodage. Test : `webrtc_frame_queue_bounded`.
-Statut : terminé — commit : 47a4190 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
 
 **[x] E5. fake_xr_device** (`simulators/fake_xr_device.py`). Client aiortc qui rejoue un MP4 + JSONL de pose ; options : fps, perte réseau simulée, rotation 90° (mode capture-only). Produit des `FrameEnvelope` valides (frame_id croissants, monotonic ns).
-Statut : terminé — commit : 47a4190 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
 
 **[x] E6. delivery_adapter** (`services/live-pc/delivery_adapter.py`). Boucle : lit `brainlive_intervention_delivery_queue` (`delivery_status='queued'`, tri priority desc) → convertit en `UIIntent` (`producer='brainlive'`, `component='context_card'` par défaut, `evidence_refs` depuis `evidence_json`, `delivery_id` reporté) → push WebSocket/DataChannel vers renderers connectés → à l'accusé : `record_delivery_feedback(delivery_id=..., feedback_type='delivered', feedback_source='xr_adapter')` puis relaie chaque `UIReceipt` (`displayed/seen/acted/dismissed`) vers la même fonction. Les UIIntent d'UltraLive/VisionRT ne passent **pas** par cette queue (réflexes directs) ; seul BrainLive H1 y passe. Lire `v18_delivery.py` en entier avant (fonction de poll existante à réutiliser si présente).
-Statut : terminé — commit : 47a4190 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
 
 **[x] E7. companion-web** (`apps/companion-web/`). Une page : WebSocket vers delivery_adapter, rendu des UIIntent (cards/sous-titres/contours sur flux optionnel), clic → UIReceipt. Sert de renderer de référence pour tous les tests.
-Statut : terminé — commit : 47a4190 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
 
 **[x] E8. GpuArbiter + degraded** (`services/live-pc/gpu_arbiter.py`, `degraded.py`). NVML (pynvml) : VRAM totale/utilisée par phase ; API `request(job_class) -> grant/deny/preempt` selon priorités handoff §4.1 ; vérification post-`ollama_unload` (re-mesure VRAM, alerte si pas libérée). États dégradés → événements poussés aux renderers (StatusBar).
-Statut : terminé — commit : 47a4190 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19 -m "contracts or transport"` (5 passed), `pytest tests/v19` (7 passed).
 
 **[x] E9. Scripts + profil.** `INSTALL_MLOMEGA_V19_WINDOWS.ps1` (préflight, `.venv-live`, MODEL_MANIFEST, ne touche pas `.venv`), `setup_profile.ps1` (questions → `configs/user_profile.yaml`, cf. handoff §3.5), `RUN_MLOMEGA_V19.ps1 -SimOnly|-Xr`, `DOCTOR_MLOMEGA_V19.ps1` (ports, GPU, Qdrant, Ollama, contrats, queue delivery, profil), `BENCH_V19.ps1`. Ports V19 : préfixe 87xx hors 8766.
-Statut : terminé — commit : 76509be — tests : `pytest tests/v19` (9 passed).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19` (9 passed).
 
 **E10. Checkpoint Lot 1.** `pytest tests/v19 -m "contracts or transport"` vert ; `pytest tests/test_v18_*` vert inchangé ; démo : `RUN -SimOnly` → fake device → UIIntent test → companion-web → receipt visible dans `brainlive_intervention_feedback_events_v188`. Bench ingress consigné dans `docs/BENCH_RESULTS.md`. **Revue avant Lot 2.**
 
@@ -222,10 +222,10 @@ Statut : terminé — commit : 76509be — tests : `pytest tests/v19` (9 passed)
 ## 4. Étapes — LOT 2 (Mémoire profonde)
 
 **[x] E11. Tables V19** (`src/mlomega_audio_elite/v19_visual_store.py`). SCHEMA propre + `ensure_v19_visual_schema()` (pattern §2.8) : `visual_evidence_assets_v19`, `visual_events_v19`, `world_entity_links_v19`, `scene_session_summaries_v19`, `ui_interaction_outcomes_v19` (colonnes : handoff §Lot 2 + toujours `person_id`, `live_session_id`, temps UTC + `created_at`). Puis **enregistrer chaque table de preuve dans `_DIRECT_EVIDENCE_SOURCES`** (format §2.7) — ex. `"visual_events_v19": ("visual_event_id", "person_id", ("occurred_at", "created_at"))`. Test : insertion + `validate_stratum_evidence` accepte une ref vers ces tables.
-Statut : terminé — commit : 68a9386 — tests : `pytest tests/v19/test_memory_v19.py -q` (2 passed)
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19/test_memory_v19.py -q` (2 passed)
 
 **[x] E12. Endpoints** (`api.py`, style §2.9, additif en fin de fichier) : `/ingest/visual-event` (EvidenceEvent JSON → `visual_events_v19` + asset), `/ingest/scene-summary`, `/memory/correction-visual`, `/xr/session-health`, `/evidence/request-clip`. Chaque payload porte `memory_owner_id` explicite (règle §2.10).
-Statut : terminé — commit : 5fd18d805586b0928c8ee5c4c8620aa07aa8af2e — tests : `pytest tests/v19/test_memory_v19.py -q` (3 passed) ; `pytest tests/v19 -m memory -q` (3 passed, 10 deselected).
+Statut : terminé — commit : 154ee7fd401ded2ad2fa5a47caebdc4907c18b60 — tests : `pytest tests/v19/test_memory_v19.py -q` (3 passed) ; `pytest tests/v19 -m memory -q` (3 passed, 10 deselected).
 
 **E13. MemoryBridge + EvidenceStore** (`services/live-pc/memory_bridge.py`, `evidence_store.py`). Déclencheurs de sélection (handoff §Lot 2) → clip depuis ring buffer/tampon-jour → sha256 → POST `/ingest/visual-event`. Tampon-jour : encodage basse résolution continu, purge au close-day, quota doctor.
 

@@ -15,6 +15,7 @@ from .retrieval import answer, search
 from .consolidation import consolidate_all
 from .voice_identity import enroll_voice, match_voice
 from .v19_visual_store import store_scene_summary, store_ui_outcome, store_visual_event
+from .v19_self_schema import get_self_schema
 
 
 def _v19_store_response(fn, payload: dict, key: str, **extra):
@@ -101,6 +102,10 @@ if FastAPI is not None:
     @app.get("/xr/session-health")
     def xr_session_health(memory_owner_id: str, live_session_id: str):
         return {"ok": True, "memory_owner_id": memory_owner_id, "live_session_id": live_session_id, "system": "MLOmega V19 XR"}
+
+    @app.get("/self-schema")
+    def self_schema(memory_owner_id: str, limit: int = 20):
+        return {"memory_owner_id": memory_owner_id, "entries": get_self_schema(person_id=memory_owner_id, limit=limit)}
 
     @app.post("/evidence/request-clip")
     def evidence_request_clip(payload: dict = Body(...)):
