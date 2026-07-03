@@ -30,6 +30,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from typing import Any, Iterable
+import wave
 
 from .config import get_settings
 from .runtime_v18_7 import DeepAudioRuntime, classify_failure, gpu_phase, retry_operation, record_phase_event
@@ -561,6 +562,14 @@ def _stitch_pieces(
     if not pieces:
         raise DeepAudioError("cannot stitch an empty deep-audio tape")
 
+    if shutil.which("ffmpeg") is None:
+        return _stitch_wav_pieces_without_ffmpeg(
+            pieces,
+            artifact_dir=artifact_dir,
+            artifact_id=artifact_id,
+            max_gap_seconds=max_gap_seconds,
+        )
+
     concat_paths: list[Path] = []
     time_map: list[dict[str, Any]] = []
     local = 0.0
@@ -628,6 +637,98 @@ def _stitch_pieces(
     measured = _duration_seconds(tape)
     if abs(measured - local) > 0.25:
         raise DeepAudioError(f"stitch duration mismatch: expected {local:.3f}s, got {measured:.3f}s")
+    return tape, time_map
+
+
+def _wav_params(path: Path) -> tuple[int, int, int]:
+    with wave.open(str(path), "rb") as wav:
+        return wav.getnchannels(), wav.getsampwidth(), wav.getframerate()
+
+
+def _stitch_wav_pieces_without_ffmpeg(
+    pieces: list[AudioPiece], *, artifact_dir: Path, artifact_id: str, max_gap_seconds: float
+) -> tuple[Path, list[dict[str, Any]]]:
+    """Minimal WAV-only stitcher for simulator/tests when ffmpeg is unavailable.
+
+    Production post-stop still uses ffmpeg for arbitrary phone captures, trims
+    and re-encoding.  The V18 baseline tests exercise already-normalized
+    mono/16 kHz/PCM WAV chunks; supporting that path keeps the logical baseline
+    runnable in small CI containers without claiming hardware/media coverage.
+    """
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    tape = artifact_dir / f"{artifact_id}.wav"
+    params: tuple[int, int, int] | None = None
+    time_map: list[dict[str, Any]] = []
+    local = 0.0
+    previous_absolute_end: datetime | None = None
+
+    with wave.open(str(tape), "wb") as out:
+        for index, piece in enumerate(pieces):
+            source = Path(piece.source_path).expanduser().resolve()
+            if source.suffix.lower() != ".wav":
+                raise DeepAudioError("ffmpeg is required for non-WAV deep-audio captures")
+            source_params = _wav_params(source)
+            if params is None:
+                params = source_params
+                out.setnchannels(params[0])
+                out.setsampwidth(params[1])
+                out.setframerate(params[2])
+            elif source_params != params:
+                raise DeepAudioError("ffmpeg is required to normalize mixed WAV capture formats")
+            if piece.needs_trim:
+                raise DeepAudioError("ffmpeg is required to trim deep-audio captures")
+
+            absolute_start = _parse_iso(piece.absolute_start)
+            absolute_end = _parse_iso(piece.absolute_end)
+            if previous_absolute_end is not None and absolute_start > previous_absolute_end:
+                raw_gap = (absolute_start - previous_absolute_end).total_seconds()
+                inserted_gap = min(raw_gap, max_gap_seconds)
+                if inserted_gap >= 0.01:
+                    silence_frames = int(round(inserted_gap * params[2]))
+                    out.writeframes(b"\x00" * silence_frames * params[0] * params[1])
+                    time_map.append(
+                        {
+                            "kind": "silence_gap",
+                            "event_id": None,
+                            "source_event_id": None,
+                            "local_start_s": round(local, 6),
+                            "local_end_s": round(local + inserted_gap, 6),
+                            "absolute_start": _iso(previous_absolute_end),
+                            "absolute_end": _iso(absolute_start),
+                            "source_duration_s": round(raw_gap, 6),
+                            "tape_duration_s": round(inserted_gap, 6),
+                            "gap_compressed": raw_gap > inserted_gap + 0.001,
+                        }
+                    )
+                    local += inserted_gap
+
+            with wave.open(str(source), "rb") as wav:
+                frames = wav.readframes(wav.getnframes())
+                out.writeframes(frames)
+                duration = float(wav.getnframes()) / float(wav.getframerate())
+            source_duration = max(0.001, (absolute_end - absolute_start).total_seconds())
+            time_map.append(
+                {
+                    "kind": "audio_piece",
+                    "event_id": piece.event_id,
+                    "source_event_id": piece.source_event_id,
+                    "source_path": piece.source_path,
+                    "source_kind": str((piece.live_speaker or {}).get("source_kind") or "unknown"),
+                    "local_start_s": round(local, 6),
+                    "local_end_s": round(local + duration, 6),
+                    "absolute_start": piece.absolute_start,
+                    "absolute_end": piece.absolute_end,
+                    "source_duration_s": round(source_duration, 6),
+                    "tape_duration_s": round(duration, 6),
+                }
+            )
+            local += duration
+            previous_absolute_end = max(previous_absolute_end, absolute_end) if previous_absolute_end is not None else absolute_end
+
+    if params is None:
+        raise DeepAudioError("cannot stitch an empty deep-audio tape")
+    if not tape.exists() or tape.stat().st_size == 0:
+        raise DeepAudioError("deep-audio tape was not created")
     return tape, time_map
 
 
