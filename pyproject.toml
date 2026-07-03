@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlomega-audio-elite"
+version = "18.8.1"
+description = "MemoryLight Omega V18.8: adaptive live dispatch, activity-aware bundles, delivery feedback lineage and resumable close-day."
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+license = {text = "MIT"}
+authors = [{name = "MemoryLight Omega"}]
+dependencies = ["python-dotenv>=1.0", "requests>=2.32", "pydantic>=2.7,<3"]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "pillow>=10.0"]
+elite-audio = ["whisperx>=3.3.0", "pyannote.audio>=3.3.3", "speechbrain>=1.0.0", "silero-vad>=5.1", "faster-whisper>=1.0", "torchaudio>=2.4", "librosa>=0.10", "soundfile>=0.12"]
+vector = ["sentence-transformers>=3.0", "transformers>=4.52", "accelerate>=0.33", "qdrant-client>=1.11", "lancedb>=0.13"]
+core-v18-6 = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "pillow>=10.0", "whisperx>=3.3.0", "pyannote.audio>=3.3.3", "speechbrain>=1.0.0", "silero-vad>=5.1", "faster-whisper>=1.0", "torchaudio>=2.4", "librosa>=0.10", "soundfile>=0.12", "sentence-transformers>=3.0", "transformers>=4.52", "accelerate>=0.33", "qdrant-client>=1.11", "lancedb>=0.13", "ollama>=0.3"]
+# Optional legacy integrations are deliberately not installed by the core Windows installer.
+graph = ["neo4j>=5.26", "graphiti-core>=0.18", "mem0ai>=0.1.114"]
+llm = ["ollama>=0.3"]
+test = ["pytest>=8"]
+all = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "python-multipart>=0.0.9", "pillow>=10.0", "pytest>=8", "whisperx>=3.3.0", "pyannote.audio>=3.3.3", "speechbrain>=1.0.0", "silero-vad>=5.1", "faster-whisper>=1.0", "torchaudio>=2.4", "librosa>=0.10", "soundfile>=0.12", "sentence-transformers>=3.0", "transformers>=4.52", "accelerate>=0.33", "qdrant-client>=1.11", "lancedb>=0.13", "neo4j>=5.26", "graphiti-core>=0.18", "mem0ai>=0.1.114", "ollama>=0.3"]
+
+[project.scripts]
+mlomega-audio = "mlomega_audio_elite.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

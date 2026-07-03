@@ -1,0 +1,198 @@
+{
+  "$defs": {
+    "ReflexEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "contracts_version": {
+          "default": "v19.0",
+          "title": "Contracts Version",
+          "type": "string"
+        },
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "source_frame_id": {
+          "title": "Source Frame Id",
+          "type": "string"
+        },
+        "skill": {
+          "title": "Skill",
+          "type": "string"
+        },
+        "prediction": {
+          "additionalProperties": true,
+          "title": "Prediction",
+          "type": "object"
+        },
+        "horizon_ms": {
+          "title": "Horizon Ms",
+          "type": "integer"
+        },
+        "confidence": {
+          "title": "Confidence",
+          "type": "number"
+        },
+        "severity": {
+          "title": "Severity",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "aggregate_key": {
+          "title": "Aggregate Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "source_frame_id",
+        "skill",
+        "prediction",
+        "horizon_ms",
+        "confidence",
+        "severity",
+        "aggregate_key"
+      ],
+      "title": "ReflexEvent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contracts_version": {
+      "default": "v19.0",
+      "title": "Contracts Version",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "as_of": {
+      "title": "As Of",
+      "type": "string"
+    },
+    "place": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Place"
+    },
+    "map_quality": {
+      "default": 0.0,
+      "title": "Map Quality",
+      "type": "number"
+    },
+    "focus": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Focus"
+    },
+    "visible_entities": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Visible Entities",
+      "type": "array"
+    },
+    "people_identified": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "People Identified",
+      "type": "array"
+    },
+    "activity": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Activity"
+    },
+    "translation_active": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Translation Active"
+    },
+    "changes": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Changes",
+      "type": "array"
+    },
+    "reflex_events": {
+      "items": {
+        "$ref": "#/$defs/ReflexEvent"
+      },
+      "title": "Reflex Events",
+      "type": "array"
+    },
+    "brain2_memory": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Brain2 Memory",
+      "type": "array"
+    },
+    "evidence_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Refs",
+      "type": "array"
+    },
+    "omissions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Omissions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "session_id",
+    "as_of"
+  ],
+  "title": "HotSceneContext",
+  "type": "object"
+}

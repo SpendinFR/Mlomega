@@ -188,11 +188,14 @@ CLI : `brainlive-close-day`, `brainlive-resume-close-day`, `brainlive-deep-visio
 
 ## 3. Étapes — LOT 1 (Fondation)
 
-**E1. Squelette monorepo.** Créer l'arborescence handoff §3.1 ; copier `MLOmega_V18_8_1_Evidence_Connected` → `src/` + fichiers racine nécessaires ; vérifier que `pytest tests/test_v18_8_1_evidence_connected.py` passe AVANT toute modification (baseline). Geler `runtime_v18_7`/`operations_v18_7` (en-tête « gelé, ne pas diverger de v18_8 »).
+**[x] E1. Squelette monorepo.**
+Statut : terminé — commit : 42a810a — tests : pytest MLOmega_V18_8_1_Evidence_Connected/tests/test_v18_8_1_evidence_connected.py (6 passed) Créer l'arborescence handoff §3.1 ; copier `MLOmega_V18_8_1_Evidence_Connected` → `src/` + fichiers racine nécessaires ; vérifier que `pytest tests/test_v18_8_1_evidence_connected.py` passe AVANT toute modification (baseline). Geler `runtime_v18_7`/`operations_v18_7` (en-tête « gelé, ne pas diverger de v18_8 »).
 
-**E2. Contrats.** `packages/contracts/schemas/*.schema.json` (8 contrats handoff §3.4, champ `contracts_version` partout) → modèles pydantic v2 générés/écrits dans `packages/contracts/python/` → stubs C# dans `csharp/`. Test round-trip python→JSON→python pour chaque contrat. Aucune dépendance vers le cœur ni vers un SDK.
+**[x] E2. Contrats.**
+Statut : terminé — commit : bcbac85 — tests : pytest tests/v19/test_contracts.py (2 passed) `packages/contracts/schemas/*.schema.json` (8 contrats handoff §3.4, champ `contracts_version` partout) → modèles pydantic v2 générés/écrits dans `packages/contracts/python/` → stubs C# dans `csharp/`. Test round-trip python→JSON→python pour chaque contrat. Aucune dépendance vers le cœur ni vers un SDK.
 
-**E3. SessionHub** (`services/live-pc/sessionhub.py`). Sessions (`session_id` = uuid horodaté, jamais réutilisé), ClockSync (échange de timestamps monotones, offset stocké par session), token de session éphémère émis à l'appairage (remplace le token statique pour le canal XR ; le bridge V18.8 existant garde le sien). Test : deux clients simulés, offsets cohérents.
+**[x] E3. SessionHub**
+Statut : terminé — commit : 2da84fc — tests : pytest tests/v19/test_sessionhub.py (2 passed) (`services/live-pc/sessionhub.py`). Sessions (`session_id` = uuid horodaté, jamais réutilisé), ClockSync (échange de timestamps monotones, offset stocké par session), token de session éphémère émis à l'appairage (remplace le token statique pour le canal XR ; le bridge V18.8 existant garde le sien). Test : deux clients simulés, offsets cohérents.
 
 **E4. VideoIngress + gateway** (`services/live-pc/gateway.py`). Interface `VideoIngress` (async itérateur de `(frame_bgr, FrameEnvelope)`), impl `AiortcIngress`. Queue = 1 : variable « dernière frame » + compteur de drops, jamais de liste. Bench intégré : P50/P95 décodage. Test : `webrtc_frame_queue_bounded`.
 

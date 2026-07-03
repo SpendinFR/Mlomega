@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "contracts_version": {
+      "default": "v19.0",
+      "title": "Contracts Version",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "track_id": {
+      "title": "Track Id",
+      "type": "string"
+    },
+    "source_frame_id": {
+      "title": "Source Frame Id",
+      "type": "string"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "bbox_or_mask": {
+      "additionalProperties": true,
+      "title": "Bbox Or Mask",
+      "type": "object"
+    },
+    "velocity_screen": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Velocity Screen",
+      "type": "array"
+    },
+    "visibility": {
+      "title": "Visibility",
+      "type": "number"
+    },
+    "confidence": {
+      "title": "Confidence",
+      "type": "number"
+    },
+    "observed_at_monotonic_ns": {
+      "title": "Observed At Monotonic Ns",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "session_id",
+    "track_id",
+    "source_frame_id",
+    "kind",
+    "bbox_or_mask",
+    "visibility",
+    "confidence",
+    "observed_at_monotonic_ns"
+  ],
+  "title": "LocalTrack",
+  "type": "object"
+}

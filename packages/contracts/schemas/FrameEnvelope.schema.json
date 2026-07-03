@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "Pose": {
+      "additionalProperties": false,
+      "properties": {
+        "contracts_version": {
+          "default": "v19.0",
+          "title": "Contracts Version",
+          "type": "string"
+        },
+        "position": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Position",
+          "type": "array"
+        },
+        "rotation": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Rotation",
+          "type": "array"
+        }
+      },
+      "title": "Pose",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "contracts_version": {
+      "default": "v19.0",
+      "title": "Contracts Version",
+      "type": "string"
+    },
+    "session_id": {
+      "title": "Session Id",
+      "type": "string"
+    },
+    "frame_id": {
+      "title": "Frame Id",
+      "type": "string"
+    },
+    "capture_monotonic_ns": {
+      "title": "Capture Monotonic Ns",
+      "type": "integer"
+    },
+    "captured_at_utc": {
+      "title": "Captured At Utc",
+      "type": "string"
+    },
+    "pose": {
+      "$ref": "#/$defs/Pose"
+    },
+    "intrinsics": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Intrinsics"
+    },
+    "rotation": {
+      "default": 0,
+      "enum": [
+        0,
+        90,
+        180,
+        270
+      ],
+      "title": "Rotation",
+      "type": "integer"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "session_id",
+    "frame_id",
+    "capture_monotonic_ns",
+    "captured_at_utc",
+    "pose",
+    "source"
+  ],
+  "title": "FrameEnvelope",
+  "type": "object"
+}

@@ -1,0 +1,71 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "contracts_version": {
+      "default": "v19.0",
+      "title": "Contracts Version",
+      "type": "string"
+    },
+    "ui_intent_id": {
+      "title": "Ui Intent Id",
+      "type": "string"
+    },
+    "delivery_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivery Id"
+    },
+    "event": {
+      "enum": [
+        "displayed",
+        "seen",
+        "acted",
+        "dismissed",
+        "corrected"
+      ],
+      "title": "Event",
+      "type": "string"
+    },
+    "observed_at": {
+      "title": "Observed At",
+      "type": "string"
+    },
+    "local_track_state": {
+      "additionalProperties": true,
+      "title": "Local Track State",
+      "type": "object"
+    },
+    "user_action": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "User Action"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ui_intent_id",
+    "event",
+    "observed_at",
+    "source"
+  ],
+  "title": "UIReceipt",
+  "type": "object"
+}
