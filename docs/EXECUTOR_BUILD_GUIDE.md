@@ -260,6 +260,7 @@ Statut : terminé — commit : 8c24192 — tests : tests/v19 40/40 ; V18 108/108
 ## 5. Étapes — LOT 3 (Live/XR/mobile)
 
 **E22. Gate G1 matériel (peut démarrer dès la fin du Lot 1, en parallèle du Lot 2).** Unity 6 LTS + XREAL SDK 3.1.0, sample officiel sur S25 réel : Eye RGB, pose, rendu stéréo, permissions (`RECORD_AUDIO`, `FOREGROUND_SERVICE_MEDIA_PROJECTION`), coupure/reprise. Si la caméra Eye est inaccessible : plan B `one-xr` (pose) + caméra S25 (même pipeline), ADR, et continuer.
+Statut : code livré — commit : 74bfcb7 — validation matérielle S25/XREAL à exécuter par l'utilisateur (checklist `apps/xr-mobile/README.md`). Projet Unity 6 LTS complet dans `apps/xr-mobile/` (adaptateurs `IXRDeviceAdapter`/`XrealDeviceAdapter`/`SimulatedDeviceAdapter`, `XrSessionController`, `EyeCapturePreview`, `PoseReadout`, `PermissionGate`, `G1StatusOverlay`, shader YUV_420_888→RGB, `G1SceneBuilder`). SDK propriétaire non committé (déposé par l'utilisateur, cf. README). Décisions doc XREAL consignées dans `docs/DECISIONS.md` § E22 G1 Unity. Non compilable dans le conteneur (pas d'Unity) — la case [x] viendra après la checklist matérielle.
 
 **E23. App Unity noyau.** `XRDeviceAdapter` (interface C#) + `XrealDeviceAdapter`, `SimulatedDeviceAdapter`, `PhoneOnlyAdapter` ; `XrSessionController`, `EyeCaptureSource` (frame_id + monotonic), `PosePublisher`, `ClockSync` (protocole E3).
 
