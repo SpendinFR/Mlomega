@@ -32,6 +32,8 @@ def _load(name: str, path: str):
 
 gateway = _load("gateway", "services/live-pc/gateway.py")
 fake = _load("fake_xr_device", "simulators/fake_xr_device.py")
+sessionhub = _load("sessionhub", "services/live-pc/sessionhub.py")
+sessionhub_http = _load("sessionhub_http", "services/live-pc/sessionhub_http.py")
 
 aiortc_missing = not (gateway.AIORTC_AVAILABLE and fake.AIORTC_AVAILABLE)
 skip_no_aiortc = pytest.mark.skipif(aiortc_missing, reason="aiortc/av not installed")
@@ -132,5 +134,119 @@ def test_webrtc_metadata_loss_tolerated():
         assert result["envelopes_sent"] < result["frames_sent"]
         # Frames whose envelope was lost fall back to a placeholder envelope.
         assert m["unmatched"] >= 1
+
+    asyncio.run(run())
+
+
+# ---------------------------------------------------------------------------
+# E24: unified signaling. fake_xr_device negotiates through the SessionHub HTTP
+# server's POST /webrtc/offer (token-gated) instead of the ingress' own /offer,
+# and frames arrive with intact FrameEnvelope. The FastAPI app + shared ingress
+# run in one asyncio loop; the offer is driven through the real ASGI stack so
+# the token check and JSON contract are exercised end to end.
+# ---------------------------------------------------------------------------
+@skip_no_aiortc
+def test_webrtc_offer_through_sessionhub_http_delivers_frames():
+    httpx = pytest.importorskip("httpx")
+
+    async def run():
+        hub = sessionhub.SessionHub()
+        ingress = gateway.AiortcIngress(
+            host="127.0.0.1", port=8795, session_id="sim-session", max_frames=20
+        )
+        await ingress.start()
+        app = sessionhub_http.create_app(hub, ingress=ingress, enable_signaling=True)
+
+        received: list = []
+
+        async def consume():
+            async for frame_bgr, env in ingress:
+                received.append((frame_bgr, env))
+
+        consumer = asyncio.create_task(consume())
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://sessionhub.test"
+        ) as http:
+            # 1) create a session -> ephemeral token
+            r = await http.post("/session/create", json={"device_id": "s25-int"})
+            assert r.status_code == 200
+            creds = r.json()
+
+            # 2) unauthenticated offer is refused
+            bad = await http.post(
+                "/webrtc/offer",
+                json={"sdp": "x", "type": "offer", "session_id": creds["session_id"], "token": "no"},
+            )
+            assert bad.status_code == 401
+
+            # 3) drive a real aiortc offer through /webrtc/offer with the token
+            from aiortc import RTCPeerConnection, RTCSessionDescription
+
+            pc = RTCPeerConnection()
+            channel = pc.createDataChannel("envelopes", ordered=True)
+            pending: list = []
+
+            track = fake._FakeCaptureTrack(
+                session_id="sim-session",
+                fps=30,
+                frames=20,
+                rotation=0,
+                loss=0.0,
+                source="fake_xr_device",
+                mp4=None,
+                poses=None,
+                on_envelope=lambda env: (
+                    channel.send(env.model_dump_json())
+                    if channel.readyState == "open"
+                    else pending.append(env)
+                ),
+            )
+
+            @channel.on("open")
+            def _flush() -> None:
+                for env in pending:
+                    channel.send(env.model_dump_json())
+                pending.clear()
+
+            pc.addTrack(track)
+            offer = await pc.createOffer()
+            await pc.setLocalDescription(offer)
+            resp = await http.post(
+                "/webrtc/offer",
+                json={
+                    "sdp": pc.localDescription.sdp,
+                    "type": pc.localDescription.type,
+                    "session_id": creds["session_id"],
+                    "token": creds["token"],
+                },
+            )
+            assert resp.status_code == 200
+            answer = resp.json()
+            assert answer["type"] == "answer"
+            await pc.setRemoteDescription(
+                RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
+            )
+
+            # wait for frames then tear down
+            while track._idx < track.total:
+                await asyncio.sleep(0.02)
+            await asyncio.sleep(0.4)
+            await pc.close()
+
+        try:
+            await asyncio.wait_for(consumer, timeout=6)
+        except asyncio.TimeoutError:
+            consumer.cancel()
+        await ingress.close()
+
+        # frames arrived through the token-gated unified signaling, with envelopes
+        assert len(received) >= 15
+        _, first_env = received[0]
+        assert first_env.frame_id.startswith("sim-session-frame-")
+        assert len(first_env.pose.position) == 3
+        m = ingress.matcher.stats()
+        assert m["unmatched"] == 0
 
     asyncio.run(run())
