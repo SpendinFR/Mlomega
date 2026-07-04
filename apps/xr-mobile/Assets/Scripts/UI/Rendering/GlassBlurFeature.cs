@@ -63,6 +63,10 @@ namespace MLOmega.XR.UI.Rendering
             {
                 renderPassEvent = _settings.injectionPoint
             };
+
+            // Tell LiquidGlass.shader the frosted background will be available: the
+            // global keyword is on only while this feature is active on the renderer.
+            if (_material != null) Shader.EnableKeyword("_HAS_BLUR_TEX");
         }
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -76,6 +80,7 @@ namespace MLOmega.XR.UI.Rendering
 
         protected override void Dispose(bool disposing)
         {
+            Shader.DisableKeyword("_HAS_BLUR_TEX");
             CoreUtils.Destroy(_material);
             _material = null;
         }

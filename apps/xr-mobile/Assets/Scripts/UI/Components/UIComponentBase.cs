@@ -355,7 +355,7 @@ namespace MLOmega.XR.UI.Components
         private static string ResolveAgeText(UIIntent intent, string level)
         {
             if (intent == null) return null;
-            double ageMs = ReadAgeMs(intent.UiHint) ;
+            double ageMs = ReadAgeMs(intent.UiHint);
             if (double.IsNaN(ageMs)) ageMs = ReadAgeMs(intent.Content);
 
             bool remembered = level == "remembered" || level == "replay";

@@ -230,3 +230,58 @@ Section E24. Décisions et divergences consignées :
   et relu ; la compilation + la validation S25 (gate matériel) sont différées. Seuls les
   tests PC (`test_sessionhub_http`, `test_transport_webrtc` unifié, `test_e24_roundtrip`)
   sont exécutés et verts ici.
+
+## 2026-07-04 — E25 Design system liquid glass (UIRuntime, 10 composants, receipts)
+
+Section E25 (seconde moitié ; `SceneCache`/`SceneCacheConfig` §9.1 et `UIIntentBroker`
+§13.2/§15.3 déjà mergés dans une première passe). Décisions et divergences consignées :
+
+- **Blur liquid glass = Kawase dual-filter dans une `ScriptableRendererFeature` URP 17
+  (RenderGraph)** plutôt qu'un GrabPass (inexistant en URP) ou un flou par-panneau. Le
+  flou de l'arrière-plan caméra est calculé **une seule fois par frame** dans
+  `GlassBlurFeature` (`GlassKawaseBlur.shader`, down/up sur une petite chaîne demi-rés) et
+  publié comme texture globale `_MLOmegaGlassBlur` (`SetGlobalTextureAfterPass`), que tous
+  les panneaux `LiquidGlass.shader` échantillonnent en espace écran — coût du flou
+  indépendant du nombre de panneaux. Kawase choisi pour un flou large et lisse en très peu
+  de passes (crucial sur GPU mobile XR où il tourne chaque frame). **Fallback réel** : si la
+  feature est absente (blur désactivé, Compatibility Mode, ou RendererData sans la feature),
+  le mot-clé global `_HAS_BLUR_TEX` reste off et le shader retombe sur un verre translucide
+  plat + rim + grain — un rendu de verre valide, jamais une erreur dure. Le rim est teinté
+  par l'accent de niveau de vérité (`UITheme.AccentFor`), donc la bordure encode la vérité.
+- **UGUI world-space en code, pas de prefabs** : chaque panneau est un `Canvas` world-space
+  (1 unité = 1 m) construit par `GlassPanel` en C#, comme la scène est générée par
+  `E25SceneBuilder` — mêmes raisons que G1/E24 (pas d'éditeur Unity ici pour valider le YAML
+  de prefab/scène ; tout le design system reste relisible en un point).
+- **StatusBar hors registre d'admission** : les 10 composants §13.1, mais StatusBar est une
+  surface **permanente** (source « S25 », priorité rung 1 jamais comptée/plafonnée par le
+  broker) → `MonoBehaviour` autonome head-locked, **pas** dans `UIComponentRegistry` (le
+  runtime n'instancie que les 9 composants pilotés par intent). StatusBar **étend** le rôle
+  de `G1StatusOverlay` (version glass glançable : cam/micro/réseau/PC/privacy/mode) **sans le
+  casser** — le panneau diagnostic verbeux G1 reste pour le gate ; les deux coexistent.
+- **Timer `seen` prudent** : `seen` n'est **jamais** émis à l'affichage — seulement après un
+  dwell configurable (`UIComponentBase._seenDwellSeconds`, défaut 1,2 s) mesuré depuis la
+  première frame visible. `seen` = exposition, pas compréhension (§13.3). `displayed` est émis
+  une fois, dès que l'alpha du fade-in franchit le seuil visible ; `dismissed` **uniquement**
+  sur suppression utilisateur explicite (les autres retraits — TTL/track perdu/éviction —
+  fadent en silence, le broker ayant déjà journalisé le `ui_intent_drop_reason`).
+- **Mapping composant→type** : `UIComponentRegistry` normalise la chaîne `component` du
+  contrat (minuscule, alphanumérique) → type concret, avec quelques alias (`translation`→
+  Subtitle §14.4, `lens`→LensWindow, `arrow`→OffscreenArrow). Statique et pur → testé sans
+  éditeur.
+- **Vérité §17.2 centralisée** : `TruthDescriptor` (struct pur) résout badge « probable »,
+  âge last-seen humanisé (depuis `age_ms`/`last_seen_ms` de `content`/`ui_hint`), étiquette
+  hypothèse (inferred), et accent. Règles dures appliquées par composant : `PersonTag`
+  n'affiche **aucun nom** sous `IdentityNameConfidenceThreshold` ; `OffscreenArrow` ne dessine
+  **rien** sous `MapQualityArrowThreshold` (« jamais de flèche sans qualité de carte », §14.6)
+  ; `PersonTag` s'ancre **au-dessus** du bbox visage, jamais dessus.
+- **Receipts qui ne se perdent pas** : `UIReceiptTransportSink` délègue à un `ReceiptOutbox`
+  pur (file **bornée** FIFO ; drop du plus ancien au-delà de `maxPending`) ; flush à la
+  reconnexion (`LiveTransportState.Connected`), ordre préservé, ne throw jamais (contrat
+  `IReceiptSink`). Le seam pur rend la file testable sans WebRTC.
+- **Drive déterministe pour les tests** : `UIComponentBase.Tick(now, dt)` est public (miroir
+  de `SceneCache.Tick`/`UIIntentBroker.Tick`) pour que les tests EditMode avancent
+  l'animation + la timeline de receipts sans player loop.
+- **Impossible d'ouvrir Unity ici** : pas d'éditeur/compilateur Unity dans cet environnement.
+  Le C#/HLSL est écrit pour l'API URP 17/RenderGraph et TMP (ugui 2.0) et relu ; la
+  compilation, les tests EditMode et la validation visuelle éditeur/S25 sont différées à la
+  première ouverture par l'utilisateur.

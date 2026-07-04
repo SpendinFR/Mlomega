@@ -46,7 +46,9 @@ Shader "MLOmega/LiquidGlass"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile_local _ _HAS_BLUR_TEX
+            // Global keyword: enabled by GlassBlurFeature while the frosted
+            // background texture is being produced; off => flat-translucent fallback.
+            #pragma multi_compile _ _HAS_BLUR_TEX
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
