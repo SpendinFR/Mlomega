@@ -51,7 +51,7 @@ namespace MLOmega.XR.UI.Components
             }
         }
 
-        internal static string TruthChipText(TruthDescriptor truth)
+        public static string TruthChipText(TruthDescriptor truth)
         {
             if (truth.ShowHypothesisLabel) return "hypothesis";
             if (truth.ShowProbableBadge) return "probable";
