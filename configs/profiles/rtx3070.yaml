@@ -4,9 +4,51 @@ video:
   target_resolution: 720p
   target_fps: 30
 vision:
+  # Adaptive detector cadence (handoff §3.6). Bounds only — the live cadence is
+  # driven by an inter-frame motion score + focus demand, never hard-coded.
   detector_fps_min: 5
   detector_fps_max: 15
   queue_size: 1
+  # Motion score (mean abs inter-frame luma delta, 0..1) at/above which the
+  # detector runs at fps_max; at/below motion_low it floors to fps_min.
+  motion_high: 0.06
+  motion_low: 0.015
+  # Keyframe selection: scene-change score above this records a keyframe
+  # (histogram distance + motion), with a min spacing so a moving scene emits at
+  # most ~1 keyframe / keyframe_min_interval_s.
+  keyframe_change_threshold: 0.35
+  keyframe_min_interval_s: 3.0
+  detector:
+    model_path: models/yolox_nano.onnx
+    input_size: 416
+    score_threshold: 0.30
+    nms_threshold: 0.45
+  ocr:
+    max_roi_px: 640          # OCR ROI/crop cap; never full-screen (handoff §3.6)
+  vlm:
+    model_env: MLOMEGA_VLM_MODEL
+    default_model: moondream
+    timeout_s: 8.0           # short timeout; degrade honestly if Ollama absent
+    max_crop_px: 512
+audio:
+  target_sample_rate: 16000
+  vad:
+    aggressiveness: 2        # webrtcvad 0..3
+    frame_ms: 30
+    min_speech_ms: 200
+    max_silence_ms: 400
+  asr:
+    model: small
+    compute_type: int8       # GPU if CUDA present, else CPU
+    target_language: fr      # subtitles translated into this language
 gpu:
   max_live_vram_ratio: 0.90
   degrade_order: [detector_floor, pause_changes, refuse_vlm]
+  job_budgets_mb:
+    tracker: 512
+    detector: 512
+    asr: 1024                # faster-whisper small int8 ~1 Go (dedicated ASR class)
+    ocr: 768
+    live_llm: 3072
+    vlm: 5632
+    deep: 8192
