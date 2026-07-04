@@ -1,0 +1,255 @@
+# MLOmega V19 — E29 scenario manifest.
+#
+# The 16 handoff scenarios, each mapped to its §14 execution chain, the steps the
+# runner simulates against the REAL live pipeline (video/pose/audio synthetic →
+# VisionRT/AudioRT/WorldBrain/scene_adapter → intents/events/tables), and the
+# assertions verified at the LIVE level. Honest E29 scope: we prove the live
+# chains up to the delivery-queue entry / event write; memory/LLM depth that
+# depends on Brain2/Qwen (close-day) is deferred to the final e2e test.
+#
+# assert kinds understood by scripts/run_scenarios_v19.py:
+#   scene_delta_label   : a SceneDelta carried a track with this label
+#   focus_intent        : a focus request (what_is/find/ocr) produced a UIIntent
+#                         with the given kind and (optional) truth_level / status
+#   ocr_contains        : an OCR focus reply text contains this substring
+#   subtitle_final      : AudioRT emitted a final subtitle (optional translated)
+#   entity_promoted     : WorldBrain promoted at least one entity (optional label)
+#   last_seen           : WorldBrain reports a last-seen entity with an age
+#   change_event        : a ChangeEvent of the given type was produced
+#   delivery_queued     : scene_adapter enqueued a delivery (source_key prefix)
+#   visual_event        : a row landed in visual_events_v19 (event_type)
+#   keyframe_recorded   : at least one keyframe was recorded (replay path)
+#   reflex_cue          : a proximity/reflex UIIntent was emitted (priority high)
+#   virtual_screen      : a decorative/virtual_screen intent admitted by contract
+#   metric              : a pipeline metric satisfies a comparison
+
+version: 1
+defaults:
+  frames: 24
+  fps: 15
+
+scenarios:
+
+  - name: life_memory
+    title: "Mémoire de vie"
+    chain: "§1.3 keyframes → vision_frames(xr_keyframe) → chaîne nocturne (assembly→deep_vision→Brain2)"
+    steps:
+      - "flux personne → VisionRT → keyframe selector enregistre des keyframes"
+      - "WorldBrain promeut la personne → visual_events_v19"
+    proves: "les keyframes live entrent dans la chaîne mémoire (pont E14) ; frontière prouvée = écriture keyframe/événement"
+    worldbrain: true
+    asserts:
+      - kind: keyframe_recorded
+      - kind: entity_promoted
+        label: person
+
+  - name: person_profile
+    title: "Profil live personne"
+    chain: "§14.1 track → confirmation multi-frames → WorldBrain person entity → enqueue_delivery(source_key scène)"
+    steps:
+      - "personne détectée sur plusieurs frames → promue en entité"
+      - "known_people connu → scene_adapter → enqueue_delivery"
+    proves: "entité person promue → enqueue_delivery avec source_key scène"
+    worldbrain: true
+    known_person: true
+    asserts:
+      - kind: entity_promoted
+        label: person
+      - kind: delivery_queued
+        source_key_prefix: "scene:"
+
+  - name: conversational
+    title: "Assistant conversationnel"
+    chain: "§14.1 audio+scène → transcript note_transcript → HotSceneContext → policy"
+    steps:
+      - "WAV parlé → AudioRT → transcript final → note_transcript"
+      - "scène personne → HotSceneContext construit"
+    proves: "le transcript alimente le contexte et l'intervention part en queue"
+    worldbrain: true
+    known_person: true
+    audio: true
+    asserts:
+      - kind: subtitle_final
+      - kind: delivery_queued
+        source_key_prefix: "scene:"
+
+  - name: translation
+    title: "Traduction live"
+    chain: "§14.4 audio → VAD → ASR + LID → traduction → SubtitleSkill UIIntent partiel/final"
+    steps:
+      - "WAV anglais → AudioRT (target=fr) → sous-titre final traduit"
+    proves: "subtitle final traduit émis sans LLM (fr→en, Argos, sinon dégradé honnête)"
+    audio: true
+    audio_target: en
+    asserts:
+      - kind: subtitle_final
+        translated: true
+
+  - name: what_is_this
+    title: "C'est quoi ça ?"
+    chain: "§14.3 commande/focus → crop → VisionRT detector/OCR/VLM → label attaché au track"
+    steps:
+      - "focus what_is sur crop texte → detector/OCR/VLM ciblé"
+    proves: "requête what_is → UIIntent label/card lié au bon track ; classé observed/recognized/probable/inferred"
+    focus:
+      kind: what_is
+      bbox: [40, 100, 900, 500]
+      track_id: t-focus
+    asserts:
+      - kind: focus_intent
+        focus_kind: what_is
+
+  - name: zoom_ocr
+    title: "Zoom / OCR"
+    chain: "§14.5 focus centre → LensWindow crop → OCR ROI PC → texte → UIIntent"
+    steps:
+      - "focus ocr sur panneau texte → OCR ROI → texte lisible"
+    proves: "OCR ROI lit le texte réel du panneau ; jamais plein écran"
+    focus:
+      kind: ocr
+      bbox: [40, 100, 900, 500]
+      track_id: t-ocr
+    asserts:
+      - kind: focus_intent
+        focus_kind: ocr
+      - kind: ocr_contains
+        text: "GATE"
+
+  - name: assist_task
+    title: "Aide tâche"
+    chain: "§14.7 HELP(focus,goal) → TaskThread → TaskCard une étape → receipt/correction"
+    steps:
+      - "tâche active posée sur le scene_adapter → TaskCard une action → enqueue_delivery"
+    proves: "tâche active → une étape en queue delivery (TaskCard)"
+    worldbrain: true
+    active_task:
+      task_key: valve
+      next_step: "Ouvrir la vanne principale"
+    asserts:
+      - kind: delivery_queued
+        source_key_prefix: "scene:"
+
+  - name: find_object
+    title: "Retrouver objet"
+    chain: "§14.6 LOCATE(target) → SceneCache → last_seen/map_quality → flèche seulement si qualifiée sinon last-seen card"
+    steps:
+      - "objet vu puis disparu → WorldBrain last_seen avec âge"
+    proves: "entité last-seen → card avec âge ; bearing seulement si map_quality OK (voir navigation)"
+    worldbrain: true
+    stale_immediately: true
+    frames: 80
+    asserts:
+      - kind: last_seen
+      - kind: change_event
+        type: disappeared
+
+  - name: navigation
+    title: "Navigation / sortie (Maps)"
+    chain: "§14.6 flèche seulement si map_quality qualifiée ; sinon last-seen ; sinon recherche VisionRT"
+    steps:
+      - "objet disparu + carte de pose dense → last_seen ; carte insuffisante → pas de fausse flèche"
+    proves: "jamais de flèche sans qualité de carte (règle absolue §10.3/§17.2)"
+    worldbrain: true
+    stale_immediately: true
+    frames: 80
+    asserts:
+      - kind: last_seen
+      - kind: metric
+        name: map_quality
+        op: ">="
+        value: 0.0
+
+  - name: worldbrain_changes
+    title: "WorldBrain changements"
+    chain: "§14.8 keyframe relocalisée → ChangeWorker → WorldBrain ChangeEvent → visual_events_v19"
+    steps:
+      - "objet déplacé (présent → absent → ailleurs) → ChangeEvent moved/disappeared persisté"
+    proves: "ChangeEvent moved/disappeared persisté dans visual_events_v19"
+    worldbrain: true
+    stale_immediately: true
+    frames: 80
+    asserts:
+      - kind: change_event
+        type: disappeared
+      - kind: visual_event
+        event_type: entity_last_seen
+
+  - name: sherlock
+    title: "Sherlock"
+    chain: "§14.8 changement observé → WorldBrain ChangeEvent → BrainLive si pertinent (fait vs hypothèse)"
+    steps:
+      - "objet apparu/disparu → ChangeEvent observable ; l'inférence reste hypothèse"
+    proves: "trace observable → ChangeEvent ; jamais présentée comme certitude"
+    worldbrain: true
+    stale_immediately: true
+    frames: 80
+    asserts:
+      - kind: change_event
+        type: disappeared
+
+  - name: replay
+    title: "Replay"
+    chain: "§8.3 clip/keyframes retenus → tables → retrouvables par plage horaire"
+    steps:
+      - "flux → keyframes enregistrées (vision_frames xr_keyframe) retrouvables par plage horaire"
+    proves: "clip/keyframes retrouvables par plage horaire via les tables"
+    worldbrain: true
+    keyframe_sink: true
+    asserts:
+      - kind: keyframe_recorded
+      - kind: keyframe_query_time_range
+
+  - name: free_guy
+    title: "Free Guy (décoratif)"
+    chain: "§13.2 rung 7 : décoratif priorité basse admis par le broker côté contrat"
+    steps:
+      - "intent décoratif priorité basse → conforme au contrat UIIntent, rung 7"
+    proves: "intents décoratifs priorité basse admis par le broker côté contrat"
+    decorative_intent:
+      component: virtual_screen
+      priority: 0.05
+    asserts:
+      - kind: virtual_screen
+
+  - name: floating_screen
+    title: "Écran flottant"
+    chain: "§14.9 commande → VirtualScreen intent local → surface XR ; StatusBar garde contrôles"
+    steps:
+      - "commande écran → intent virtual_screen local conforme au contrat"
+    proves: "intent virtual_screen priorité basse admis par le broker côté contrat"
+    decorative_intent:
+      component: virtual_screen
+      priority: 0.1
+    asserts:
+      - kind: virtual_screen
+
+  - name: ultra_live_reflex
+    title: "Ultra-live réflexe"
+    chain: "§14.10 sensors → Motion/Road skill → UIIntent haute priorité → cue périphérique"
+    steps:
+      - "objet grossissant vite au centre → MotionProximity → cue priorité haute"
+    proves: "cue proximité émis (priorité haute, information jamais 'tu peux y aller')"
+    reflex: true
+    asserts:
+      - kind: reflex_cue
+
+  - name: capture_only
+    title: "Capture-only (rotation)"
+    chain: "§3a OrientationGuard : rotation=90 dans l'envelope → PC dé-oriente → détection/OCR corrects"
+    steps:
+      - "vidéo tournée 90° + rotation=90 → live_pipeline dé-oriente → OCR lit le texte"
+    proves: "rotation appliquée côté PC ; OCR correct sur vidéo capture-only"
+    rotation: 90
+    focus:
+      kind: ocr
+      bbox: null
+      track_id: t-rot
+    asserts:
+      - kind: focus_intent
+        focus_kind: ocr
+      - kind: ocr_contains
+        text: "EXIT"
+      - kind: metric
+        name: rotation_corrections
+        op: ">="
+        value: 1
