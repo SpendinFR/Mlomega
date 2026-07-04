@@ -137,7 +137,9 @@
       "Bash(nvidia-smi --query-gpu=driver_version --format=csv,noheader)",
       "Bash(cp /tmp/people.jpg tests/v19/fixtures/people.jpg)",
       "Bash(python -m pytest tests/v19/test_visionrt.py -q)",
-      "Bash(python -m pytest tests/v19/test_visionrt.py tests/v19/test_tracking.py -q)"
+      "Bash(python -m pytest tests/v19/test_visionrt.py tests/v19/test_tracking.py -q)",
+      "Bash(python scripts/fetch_models_v19.py --argos)",
+      "Bash(python -m pytest tests/v19/test_audiort.py -q)"
     ]
   }
 }
