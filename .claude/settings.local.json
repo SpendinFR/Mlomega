@@ -130,7 +130,14 @@
       "Bash(python -m pip install rapidocr_onnxruntime argostranslate)",
       "Bash(grep -iA6 \"markers\\\\|marker\")",
       "Bash(python -m pytest tests/v19/test_gpu_arbiter.py tests/v19/test_degraded.py -q)",
-      "Bash(python scripts/fetch_models_v19.py --check)"
+      "Bash(python scripts/fetch_models_v19.py --check)",
+      "Bash(python -m pytest tests/v19/test_tracking.py -q)",
+      "Bash(python -c \"import onnxruntime; print\\(onnxruntime.__file__\\)\")",
+      "Bash(pip index *)",
+      "Bash(nvidia-smi --query-gpu=driver_version --format=csv,noheader)",
+      "Bash(cp /tmp/people.jpg tests/v19/fixtures/people.jpg)",
+      "Bash(python -m pytest tests/v19/test_visionrt.py -q)",
+      "Bash(python -m pytest tests/v19/test_visionrt.py tests/v19/test_tracking.py -q)"
     ]
   }
 }
