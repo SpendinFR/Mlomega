@@ -20,10 +20,31 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using MLOmega.Contracts.V19;
+using MLOmega.XR.Scene;
 using UnityEngine;
 
 namespace MLOmega.XR.UI.Components
 {
+    /// <summary>
+    /// Shared services a component needs beyond its intent: the live SceneCache
+    /// (for anchoring to tracks/entities/spatial), the shared glass material, and
+    /// the camera it head-locks / billboards against. Set once by the UIRuntime
+    /// when the component is created, before the first Admit.
+    /// </summary>
+    public sealed class UIComponentContext
+    {
+        public SceneCache SceneCache { get; }
+        public Material GlassMaterial { get; }
+        public Camera Camera { get; }
+
+        public UIComponentContext(SceneCache sceneCache, Material glassMaterial, Camera camera)
+        {
+            SceneCache = sceneCache;
+            GlassMaterial = glassMaterial;
+            Camera = camera;
+        }
+    }
+
     /// <summary>Lifecycle phase of a component, mirrored to receipts.</summary>
     public enum UIComponentPhase
     {
@@ -54,6 +75,20 @@ namespace MLOmega.XR.UI.Components
 
         protected IReceiptSink Sink { get; private set; }
         protected UITheme Theme => _theme;
+
+        /// <summary>Shared services (SceneCache/material/camera), set by the runtime.</summary>
+        protected UIComponentContext Context { get; private set; }
+
+        /// <summary>Called once by the UIRuntime right after instantiation, before the first Admit.</summary>
+        public void Configure(UIComponentContext context, UITheme theme)
+        {
+            Context = context;
+            if (theme != null) _theme = theme;
+            OnConfigured();
+        }
+
+        /// <summary>Override to build persistent visuals (panels, meshes) once.</summary>
+        protected virtual void OnConfigured() { }
 
         // Animation state.
         private float _alpha;              // 0..1 current visible alpha
