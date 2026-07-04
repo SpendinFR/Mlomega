@@ -1,9 +1,12 @@
 {
-    "name": "MLOmega.XR.Scene",
-    "rootNamespace": "MLOmega.XR.Scene",
+    "name": "MLOmega.XR.Reflex",
+    "rootNamespace": "MLOmega.XR.Reflex",
     "references": [
         "MLOmega.Contracts",
-        "MLOmega.XR.Core"
+        "MLOmega.XR.Scene",
+        "MLOmega.XR.Core",
+        "MLOmega.XR.Transport",
+        "MLOmega.XR.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
