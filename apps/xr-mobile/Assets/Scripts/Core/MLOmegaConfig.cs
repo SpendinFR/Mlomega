@@ -24,6 +24,13 @@ namespace MLOmega.XR.Core
         PhoneOnly = 3
     }
 
+    /// <summary>Language of the on-device streaming ASR (maps to a sherpa-onnx model).</summary>
+    public enum ReflexAsrLanguage
+    {
+        En = 0,
+        Fr = 1
+    }
+
     [CreateAssetMenu(
         fileName = "MLOmegaConfig",
         menuName = "MLOmega/Config/MLOmega Config",
@@ -83,6 +90,15 @@ namespace MLOmega.XR.Core
         [Min(1f)]
         [SerializeField] private float _httpTimeoutSeconds = 5f;
 
+        [Header("Ultra-Live reflex (E26)")]
+        [Tooltip("Spoken wake word that arms command listening. Configurable; " +
+                 "encoded to the sherpa keywords format by the reflexvision module.")]
+        [SerializeField] private string _wakeWord = "hey mlomega";
+
+        [Tooltip("Language of the on-device streaming ASR/subtitles (fr or en). " +
+                 "Selects the sherpa-onnx model loaded by AsrKwsService.")]
+        [SerializeField] private ReflexAsrLanguage _asrLanguage = ReflexAsrLanguage.En;
+
         public string PcHost => _pcHost;
         public int SessionHubPort => _sessionHubPort;
         public bool UseTls => _useTls;
@@ -96,6 +112,8 @@ namespace MLOmega.XR.Core
         public float CaptureFps => _captureFps;
         public float PosePublishHz => _posePublishHz;
         public float HttpTimeoutSeconds => _httpTimeoutSeconds;
+        public string WakeWord => _wakeWord;
+        public ReflexAsrLanguage AsrLanguage => _asrLanguage;
 
         /// <summary>
         /// Base URL for the SessionHub, e.g. <c>http://192.168.1.10:8710</c>.

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MLOmega V19 — E26 — ReflexVision library manifest.
+     RECORD_AUDIO for the sherpa-onnx microphone (AudioRecord 16 kHz mono) and the
+     foreground-service permissions for the mic capture service that keeps ASR/KWS
+     alive while the app is backgrounded (handoff §4 / GUIDE_V19 §15.2). The
+     camera frames for MediaPipe come from the Unity capture path (Eye/phone),
+     so this library does not itself request CAMERA. The app merges these; the
+     library declares them so a consuming app cannot forget them. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <application>
+        <service
+            android:name="com.mlomega.xr.reflexvision.MicForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+    </application>
+
+</manifest>
