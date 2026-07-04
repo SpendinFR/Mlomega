@@ -113,6 +113,15 @@ def build_hot_scene_context(
     if translation_active:
         ctx["translation_active"] = dict(translation_active)
 
+    omitted_count = [0]
+
+    def _omit(ref: str) -> None:
+        # Keep the omission log compact: a bounded sample + a running count so a
+        # flood of dropped fields cannot itself blow the budget.
+        omitted_count[0] += 1
+        if len(ctx["omissions"]) < 5:
+            ctx["omissions"].append(ref)
+
     def _size(obj: Any) -> int:
         return len(json.dumps(obj, default=str))
 
@@ -139,7 +148,7 @@ def build_hot_scene_context(
             if _size(trial) + _size(sorted(evidence)) <= cfg.hot_budget_chars:
                 ctx[field_name].append(item)
             else:
-                ctx["omissions"].append(f"{field_name}:{item.get('entity_id') or item.get('type') or item.get('skill') or 'item'}")
+                _omit(f"{field_name}:{item.get('entity_id') or item.get('type') or item.get('skill') or 'item'}")
 
     # last-seen entities are appended into changes-adjacent omissions awareness
     for e in last_seen:
@@ -150,14 +159,16 @@ def build_hot_scene_context(
         if _size(trial) + _size(sorted(evidence)) <= cfg.hot_budget_chars:
             ctx["changes"].append(marker)
         else:
-            ctx["omissions"].append(f"last_seen:{e.get('entity_id')}")
+            _omit(f"last_seen:{e.get('entity_id')}")
 
     # Evidence refs last, trimming to fit.
     ev_sorted = sorted(evidence)
     while ev_sorted and _size({**ctx, "evidence_refs": ev_sorted}) > cfg.hot_budget_chars:
         dropped = ev_sorted.pop()
-        ctx["omissions"].append(f"evidence:{dropped}")
+        _omit(f"evidence:{dropped}")
     ctx["evidence_refs"] = ev_sorted
+    if omitted_count[0] > len(ctx["omissions"]):
+        ctx["omissions"].append(f"+{omitted_count[0] - len(ctx['omissions'])}_more")
     return ctx
 
 
