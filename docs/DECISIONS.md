@@ -285,3 +285,13 @@ Section E25 (seconde moitié ; `SceneCache`/`SceneCacheConfig` §9.1 et `UIInten
   Le C#/HLSL est écrit pour l'API URP 17/RenderGraph et TMP (ugui 2.0) et relu ; la
   compilation, les tests EditMode et la validation visuelle éditeur/S25 sont différées à la
   première ouverture par l'utilisateur.
+
+
+## 2026-07-04 — E26 Ultra-Live device (ADR)
+
+- **Versions épinglées** (recherche ciblée, sources officielles) : MediaPipe `com.google.mediapipe:tasks-vision:0.10.29` (HandLandmarker + GestureRecognizer en LIVE_STREAM) ; sherpa-onnx Android via JitPack `com.github.k2-fsa:sherpa-onnx-android:1.12.10` (alternative : AAR JNI des releases GitHub, documentée dans le README du module). Modèles référencés, non committés : FR `sherpa-onnx-streaming-zipformer-fr-2023-04-14`, EN `sherpa-onnx-streaming-zipformer-en-2023-06-26`, KWS zipformer (URLs et chemins d''installation dans `apps/xr-mobile/android/reflexvision/README.md`).
+- **TemplateTracker : NCC pur C#** (corrélation croisée normalisée sur texture sous-échantillonnée) plutôt que Burst/compute shader : déterministe, testable en EditMode sans dépendance, budget CPU suffisant sur la fenêtre sous-échantillonnée ; si le profiling device montre un coût trop élevé, migration Burst possible sans changer l''API.
+- **Gestes : machine à états pure Kotlin** séparée du câblage MediaPipe → unit-testable en JVM sans device ; hystérésis + durée minimale contre les faux positifs, seuils dans un objet de config.
+- **Scheduler** : détecteurs natifs (HandLandmarker, ASR) activés à la demande par le ReflexScheduler Unity (§9.4 — jamais tous en parallèle) ; budget de skills simultanées en config.
+- **Aucun LLM/VLM dans ce chemin** (handoff §3.2) : tous les calculateurs sont locaux et spécialisés ; FocusSearch interroge VisionRT par DataChannel uniquement quand connecté, sinon réponse honnête locale.
+- **ReflexEvents agrégés** par `aggregate_key` avec fenêtre glissante ; une sévérité `critical` est flushée immédiatement (test dédié).
