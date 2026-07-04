@@ -54,6 +54,28 @@ COCO_CLASSES = (
 )
 
 
+def _load_tracking_module():
+    """Load the sibling tracking.py once, robustly (package or importlib tests).
+
+    Registers the module in ``sys.modules`` *before* exec so its dataclasses
+    (which reference ``cls.__module__``) process correctly.
+    """
+    import sys as _sys
+
+    for name in ("v19_tracking", "v19_tracking_rt"):
+        if name in _sys.modules:
+            return _sys.modules[name]
+    import importlib.util as _iu
+
+    name = "v19_tracking_rt"
+    spec = _iu.spec_from_file_location(name, Path(__file__).with_name("tracking.py"))
+    assert spec and spec.loader
+    mod = _iu.module_from_spec(spec)
+    _sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -407,17 +429,10 @@ class VisionRT:
         on_ui_intent: Callable[[dict[str, Any]], Any] | None = None,
         keyframe_sink: Callable[[np.ndarray, Any], Any] | None = None,
     ) -> None:
-        import importlib.util
-
         # ByteTracker lives beside this module; import robustly whether loaded as
         # a package or via importlib (tests).
         if tracker is None:
-            spec = importlib.util.spec_from_file_location(
-                "v19_tracking_rt", Path(__file__).with_name("tracking.py")
-            )
-            assert spec and spec.loader
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
+            mod = _load_tracking_module()
             self._TrackingDetection = mod.Detection
             tracker = mod.ByteTracker()
         else:

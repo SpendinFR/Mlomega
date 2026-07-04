@@ -139,7 +139,12 @@
       "Bash(python -m pytest tests/v19/test_visionrt.py -q)",
       "Bash(python -m pytest tests/v19/test_visionrt.py tests/v19/test_tracking.py -q)",
       "Bash(python scripts/fetch_models_v19.py --argos)",
-      "Bash(python -m pytest tests/v19/test_audiort.py -q)"
+      "Bash(python -m pytest tests/v19/test_audiort.py -q)",
+      "Bash(python -m pytest tests/v19/test_e27_pipeline.py -q)",
+      "Bash(python -m pytest tests/v19/test_e27_pipeline.py::test_focus_what_is_degrades_when_ollama_absent -q)",
+      "Bash(python -m pytest tests/test_v18_8_1_evidence_connected.py -q)",
+      "Bash(python -m pytest tests/ -k \"v18\" -q)",
+      "Bash(python -m pytest tests/ -q)"
     ]
   }
 }
