@@ -7,9 +7,12 @@ Downloads every manifest entry that carries a ``url`` + ``sha256`` into its
 a file already present with the right sha256 is skipped.
 
 Usage:
-    python scripts/fetch_models_v19.py            # fetch ONNX weights (detector)
+    python scripts/fetch_models_v19.py            # fetch ONNX weights (detector + face)
     python scripts/fetch_models_v19.py --argos    # + install Argos en<->fr packs
     python scripts/fetch_models_v19.py --check     # verify only, no download
+
+Fetched ONNX assets: YOLOX-Nano detector (E27), YuNet face detector + SFace face
+embedder (E32 identity). All are sha256-pinned in the manifest.
 
 faster-whisper (`asr`) and the VLM/LLM (`ollama`) are not fetched here: the
 first is pulled into the HuggingFace cache by faster-whisper on first use, the

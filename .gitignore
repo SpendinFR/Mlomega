@@ -10,3 +10,6 @@ models/
 .scenario_runs/
 simulators/scenarios/assets/
 configs/user_profile.yaml
+
+# Test-created core memory DB (E31/E32 core imports)
+.mlomega_audio_elite/
