@@ -3,6 +3,10 @@
     "rootNamespace": "MLOmega.XR.Editor",
     "references": [
         "MLOmega.XR.Core",
+        "MLOmega.XR.UI",
+        "MLOmega.XR.Scene",
+        "MLOmega.XR.Transport",
+        "MLOmega.Contracts",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [
