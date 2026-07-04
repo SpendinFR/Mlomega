@@ -359,3 +359,68 @@ exécutés et verts ici (pas de dépendance matériel externe).
   keyframes + changes, `refuse_vlm` refuse le VLM ; tracker et sous-titres jamais
   touchés. Métriques (`vision_infer_ms`, `ocr_ms`, `vlm_queue_depth`,
   `scene_delta_rate`, drops) exposées en `/metrics` (`live_pipeline.py`).
+
+## 2026-07-04 — E28 WorldBrain + spatial + scene adapter (ADR)
+
+Tout E28 est du Python testable sur la machine cible ; `pytest tests/v19 -q` =
+78/78 verts (66 E27 + 12 E28), suite V18 inchangée. Le cœur `src/` n'est modifié
+que par appels (aucune édition, aucun schéma parallèle — piège #11).
+
+- **Promotion track→entité (§7.1)** : un track ne devient `WorldEntity` qu'après
+  `promote_min_observations` (défaut **3**) sightings **confirmés** au-dessus de
+  `promote_min_confidence` (défaut **0.35**). Une seule bbox faible ne promeut
+  jamais (testé : 5 détections à conf 0.10 → 0 entité). Seuils en config
+  (`WorldBrainConfig`, profil `worldbrain:`), jamais en dur.
+- **Observations / relations / changes** : `Observation` datée et corrigeable
+  (frame_id, track_id, state, model, confidence, evidence) ; `Relation`
+  (`on_top_of`/`near`/`holds`) dérivée **géométriquement** des bboxes de la frame
+  courante (relations frame-scoped, non persistées comme faits durables) ;
+  `ChangeEvent` `appeared`/`disappeared`/`moved` avec before/after evidence
+  (`moved` = décalage du centre > `moved_center_ratio`·diagonale ;
+  `disappeared`/`last_seen` après `stale_after_seconds`).
+- **Persistance en couches** : last-seen + changes → `visual_events_v19` via
+  `store_visual_event` (`memory_owner_id` explicite) ; résumé de fin de session →
+  `scene_session_summaries_v19` via `store_scene_summary` ; état courant →
+  **vraies** tables `brainlive_world_states` / `vision_scene_observations` via
+  `v19_visual_context.publish_visual_context` (reprises par le wrapper
+  `v18_context`). Le bookkeeping de session vit dans un SQLite **service-local**
+  léger (`worldbrain_session_*`) — **aucune nouvelle table dans le cœur**.
+- **Spatial V19.A (`spatial.py`, `PoseKeyframeMap`)** : zones par clustering de
+  positions de pose (rayon config) ; `bearing_to(entity)` = direction relative
+  pose courante → pose de dernière observation (yaw quaternion→euler autour de
+  l'axe up). **`map_quality` mesurée** = densité (nb de poses) × fraîcheur
+  (décroissance exp sur `freshness_horizon_s`) × cohérence (compacité du nuage).
+  **Règle absolue** : `bearing_to` retourne `None` si `map_quality <
+  min_map_quality_for_bearing` (défaut **0.35**) — **jamais de fausse flèche**
+  (testé : pose unique dispersée → mq 0.006 → bearing None ; nuage dense frais →
+  mq 0.999 → bearing 90° à 2 m).
+- **Point d'entrée BrainLive — choix : `enqueue_delivery` direct.**
+  `brainlive_scene_adapter.py` construit périodiquement (cadence config,
+  événementiel) un `HotSceneContext` conforme au contrat, budget **dur** en
+  caractères (défaut 4000 ; over-budget → `omissions` traçables, esprit §2.4 ;
+  log d'omission borné + compteur `+N_more` pour qu'un flot de champs droppés ne
+  fasse pas exploser le budget lui-même). Puis, quand une **situation §12.4** le
+  justifie (personne connue en scène au-dessus du seuil d'identité, objet perdu
+  redevenu visible, tâche active), il construit le candidat et appelle
+  **directement `v18_delivery.enqueue_delivery`** (`decision='notify'`,
+  `source_key` = `scene:{session}:{sujet}` significatif = frontière de dédup,
+  evidence refs). **Rationale** : le point d'entrée hot-loop
+  (`v18_8_live_policy`/`brainlive_hotloop`) attend un bundle
+  episode/manifest/fused/route produit par la chaîne d'assemblage offline — une
+  scène live n'en a aucun. `enqueue_delivery` est la primitive H1 unique et
+  documentée (handoff §8.1), elle porte dédup + cooldown, et c'est le choix
+  **réversible** : un futur pas peut substituer le hot-loop sans changer le
+  contrat de queue. Le `delivery_adapter` E6 achemine ensuite jusqu'aux lunettes.
+  Avant l'enqueue, l'adapter garantit la ligne `brainlive_sessions` (via
+  `publish_visual_context(world_state=None)`) pour que la résolution d'owner de
+  `enqueue_delivery` réussisse.
+- **§17.2 respecté** : pas de nom sous le seuil d'identité
+  (`person_conf_threshold`), pas de flèche sous le seuil de carte. WorldBrain ne
+  produit **aucun** profil psychologique ni sortie UI arbitraire (§ne-fait-pas du
+  handoff) : il rapporte des faits, BrainLive décide.
+- **Câblage `live_pipeline.py`** : `enable_worldbrain` branche
+  VisionRT→WorldBrain (via le callback `_on_scene_delta`), pose→`PoseKeyframeMap`
+  (dans `on_video_frame`), transcript final AudioRT→scene_adapter
+  (`note_transcript`), `end_session()`→résumé+flush. Métriques `map_quality`,
+  `last_seen_count`, `change_events`, `entities_promoted`, `hot_context_builds`,
+  `deliveries_enqueued` exposées sur `/metrics`.
