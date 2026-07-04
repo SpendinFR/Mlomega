@@ -290,7 +290,18 @@ class AiortcIngress:
         from aiohttp import web
 
         params = await request.json()
-        offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+        answer_sdp, answer_type = await self.handle_offer_sdp(params["sdp"], params["type"])
+        return web.json_response({"sdp": answer_sdp, "type": answer_type})
+
+    async def handle_offer_sdp(self, sdp: str, sdp_type: str) -> tuple[str, str]:
+        """Negotiate one WebRTC peer from a raw SDP offer, return the SDP answer.
+
+        Transport-agnostic core of ``_handle_offer``: used by the ingress' own
+        aiohttp ``/offer`` route (backward compatible) *and* by the unified
+        ``POST /webrtc/offer`` FastAPI route in ``sessionhub_http`` so
+        ``fake_xr_device`` and the Android client share one signaling surface.
+        """
+        offer = RTCSessionDescription(sdp=sdp, type=sdp_type)
         pc = RTCPeerConnection()
         self._pcs.add(pc)
 
@@ -317,9 +328,7 @@ class AiortcIngress:
         await pc.setRemoteDescription(offer)
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
-        return web.json_response(
-            {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
-        )
+        return pc.localDescription.sdp, pc.localDescription.type
 
     async def _consume_track(self, track: Any, pc: Any) -> None:
         count = 0
