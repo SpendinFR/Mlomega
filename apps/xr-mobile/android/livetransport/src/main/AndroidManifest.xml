@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MLOmega V19 — E24 — LiveTransport library manifest.
+     Permissions required for the WebRTC uplink (mic capture + foreground media
+     projection for the XREAL Eye/S25 capture path, handoff §4). The app merges
+     these; the library declares them so a consuming app cannot forget them. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+</manifest>

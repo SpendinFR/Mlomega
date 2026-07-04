@@ -102,5 +102,12 @@ namespace MLOmega.XR.Core
         /// </summary>
         public string SessionHubBaseUrl =>
             $"{(_useTls ? "https" : "http")}://{_pcHost}:{_sessionHubPort}";
+
+        /// <summary>
+        /// Unified WebRTC signaling endpoint (E24), served by the SessionHub HTTP
+        /// app on the same host/port: <c>{base}/webrtc/offer</c>. The Android
+        /// LiveTransportPlugin POSTs its SDP offer + session token here.
+        /// </summary>
+        public string WebrtcOfferUrl => $"{SessionHubBaseUrl}/webrtc/offer";
     }
 }
