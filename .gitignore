@@ -9,3 +9,4 @@ models/
 !models/.gitkeep
 .scenario_runs/
 simulators/scenarios/assets/
+configs/user_profile.yaml

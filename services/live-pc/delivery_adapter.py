@@ -13,6 +13,16 @@ from mlomega_audio_elite.db import connect
 from mlomega_audio_elite.utils import json_loads
 from mlomega_audio_elite.v18_8_live_policy import record_delivery_feedback
 
+# Module-level so FastAPI can resolve the `websocket: WebSocket` annotation:
+# with `from __future__ import annotations`, get_type_hints() looks the name up
+# in the MODULE globals — a WebSocket imported only inside create_app() is
+# invisible there and FastAPI silently degrades it to a required query param,
+# closing every connection with code 1008 (bug found by the E29 phone_only e2e).
+try:
+    from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+except ImportError:  # pragma: no cover - only without API deps installed
+    FastAPI = WebSocket = WebSocketDisconnect = None  # type: ignore[assignment]
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -107,10 +117,8 @@ def create_app(adapter: DeliveryAdapter | None = None):
     * WS /ws pushes queued BrainLive UIIntent messages as JSON.
     * Messages received on /ws are UIReceipt JSON and are persisted via V18.8 feedback.
     """
-    try:
-        from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-    except ImportError as exc:  # pragma: no cover - exercised only without API deps installed
-        raise RuntimeError("fastapi is required for delivery_adapter.create_app()") from exc
+    if FastAPI is None:  # pragma: no cover - exercised only without API deps installed
+        raise RuntimeError("fastapi is required for delivery_adapter.create_app()")
 
     renderer = adapter.renderer if adapter else WebSocketRendererHub()
     if not isinstance(renderer, WebSocketRendererHub):

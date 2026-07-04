@@ -424,3 +424,11 @@ que par appels (aucune édition, aucun schéma parallèle — piège #11).
   (`note_transcript`), `end_session()`→résumé+flush. Métriques `map_quality`,
   `last_seen_count`, `change_events`, `entities_promoted`, `hot_context_builds`,
   `deliveries_enqueued` exposées sur `/metrics`.
+
+
+## 2026-07-04 — E29 clôture (phone_only e2e + fix WebSocket)
+
+- **Bug de prod débusqué par le e2e** : `delivery_adapter.create_app` importait `WebSocket` localement ; avec `from __future__ import annotations`, FastAPI résout les annotations dans les globals du module → paramètre dégradé en query requis → toute connexion fermée en 1008. Le test E10 historique ne le voyait pas (hub testé avec un faux websocket). Fix : import fastapi au niveau module (fallback None si absent). Transport 23/23 re-validé.
+- `services/live-pc/profile.py` : loader du profil §3.5 avec validation et repli sûr par valeur ; `renderer_route()` → websocket (phone_only/companion_web) ou datachannel (lunettes). `configs/user_profile.yaml` ajouté au .gitignore (fichier personnel généré par setup_profile).
+- e2e phone_only : profil → `enqueue_delivery` (session bootstrapée par `publish_visual_context`, même primitive qu''E28) → WebSocket viewer (contrat companion-web exact) → receipts `delivered`+`displayed` persistés dans `brainlive_intervention_feedback_events_v188`.
+- Périmètre E29 : chaînes live des 16 scénarios prouvées en simulation (in-process + 3 clés en WebRTC réel) ; profondeur mémoire/LLM différée au test final close-day (décision utilisateur).

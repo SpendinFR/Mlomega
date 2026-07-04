@@ -37,6 +37,9 @@ namespace MLOmega.XR.UI.Components
         [SerializeField] private bool _privacyPaused;
         [SerializeField] private string _uiMode = "live";
 
+        [Tooltip("Capture-only: glasses hung vertically, frames rotated. Driven by OrientationGuard (E29 §3b).")]
+        [SerializeField] private bool _captureOnly;
+
         private GlassPanel _panel;
         private float _nextRefresh;
         private readonly StringBuilder _sb = new StringBuilder(128);
@@ -46,6 +49,8 @@ namespace MLOmega.XR.UI.Components
         public bool MicOn { get => _micOn; set => _micOn = value; }
         public bool PrivacyPaused { get => _privacyPaused; set => _privacyPaused = value; }
         public string UiMode { get => _uiMode; set => _uiMode = value; }
+        /// <summary>Capture-only badge (glasses vertical, frames rotated). Set by OrientationGuard.</summary>
+        public bool CaptureOnly { get => _captureOnly; set => _captureOnly = value; }
 
         private void Awake()
         {
@@ -101,8 +106,12 @@ namespace MLOmega.XR.UI.Components
                .Append(Glyph("mic", _micOn)).Append("  ")
                .Append(NetGlyph()).Append("  ")
                .Append(PcGlyph()).Append("  ")
-               .Append("mode:").Append(_uiMode).Append("  ")
-               .Append(Battery());
+               .Append("mode:").Append(_uiMode).Append("  ");
+            if (_captureOnly)
+            {
+                _sb.Append("<color=#FFD24A>capture-only</color>  ");
+            }
+            _sb.Append(Battery());
 
             _panel.Body.text = _sb.ToString();
         }
