@@ -33,6 +33,10 @@ namespace MLOmega.XR.Core
         public DeviceConnectionState ConnectionState => _state;
         public string DeviceName { get; private set; } = "Simulated (editor)";
         public bool IsEyeActive => _eyeActive;
+        // The simulator stands in for stereo glasses in the editor, so the full
+        // stereo scene path is exercised without hardware.
+        public bool IsStereo => true;
+        public string FrameSource => ContractDefaults.FrameSource.Simulated;
 
         public event Action<DeviceConnectionState> ConnectionStateChanged;
 

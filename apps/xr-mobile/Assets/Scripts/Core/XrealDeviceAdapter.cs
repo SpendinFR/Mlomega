@@ -53,6 +53,8 @@ namespace MLOmega.XR.Core
         public DeviceConnectionState ConnectionState => _state;
         public string DeviceName { get; private set; } = "XREAL (uninitialized)";
         public bool IsEyeActive => _eyeActive;
+        public bool IsStereo => true;
+        public string FrameSource => ContractDefaults.FrameSource.XrealEye;
 
         public event Action<DeviceConnectionState> ConnectionStateChanged;
 

@@ -24,8 +24,14 @@ namespace MLOmega.XR.Core
     public sealed class XrSessionController : MonoBehaviour
     {
         [Tooltip("Force the simulated (webcam) adapter even in a player build. " +
-                 "Leave off on device to use the real XREAL adapter.")]
+                 "Leave off on device to use the real XREAL adapter. Ignored when a " +
+                 "config with an explicit adapter kind is assigned below.")]
         [SerializeField] private bool _useSimulatorOverride;
+
+        [Tooltip("Optional runtime config. When set, its Adapter field (xreal | " +
+                 "simulated | phone_only | auto, mirroring configs/user_profile.yaml) " +
+                 "selects the device adapter via AdapterSelector.")]
+        [SerializeField] private MLOmegaConfig _config;
 
         [Tooltip("Seconds between resume attempts while suspended.")]
         [SerializeField] private float _resumeIntervalSeconds = 1.0f;
@@ -45,6 +51,12 @@ namespace MLOmega.XR.Core
         public bool UseSimulator =>
             _useSimulatorOverride || Application.isEditor;
 
+        /// <summary>
+        /// True when the active adapter renders a stereo rig; false for the flat 2D
+        /// phone-only path. Consumers (overlay, UI runtime) branch rendering on this.
+        /// </summary>
+        public bool IsStereo => Adapter == null || Adapter.IsStereo;
+
         private void SetState(XrSessionState next)
         {
             if (State == next)
@@ -57,9 +69,19 @@ namespace MLOmega.XR.Core
 
         private void Awake()
         {
-            Adapter = UseSimulator
-                ? (IXRDeviceAdapter)new SimulatedDeviceAdapter()
-                : new XrealDeviceAdapter();
+            // Config-driven selection takes precedence (E23): the Adapter field maps
+            // to configs/user_profile.yaml display/capture. Without a config we keep
+            // the E22 behaviour (simulator in editor, XREAL on device).
+            if (_config != null)
+            {
+                Adapter = AdapterSelector.Create(_config.Adapter);
+            }
+            else
+            {
+                Adapter = UseSimulator
+                    ? (IXRDeviceAdapter)new SimulatedDeviceAdapter()
+                    : new XrealDeviceAdapter();
+            }
             Adapter.ConnectionStateChanged += OnConnectionStateChanged;
         }
 
