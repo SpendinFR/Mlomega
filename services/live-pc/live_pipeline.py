@@ -53,6 +53,7 @@ degraded = _load_sibling("v19_degraded", "degraded.py")
 spatial = _load_sibling("v19_spatial", "spatial.py")
 worldbrain = _load_sibling("v19_worldbrain", "worldbrain.py")
 scene_adapter = _load_sibling("v19_scene_adapter", "brainlive_scene_adapter.py")
+conversation_bridge = _load_sibling("v19_conversation_bridge", "conversation_bridge.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -141,6 +142,8 @@ class LivePipeline:
         known_people: dict[str, dict[str, Any]] | None = None,
         user_profile: dict[str, Any] | None = None,
         apply_rotation: bool = True,
+        enable_conversation: bool = False,
+        conversation_bridge: Any = None,
     ) -> None:
         self.session_id = session_id
         self.ingress = ingress
@@ -234,6 +237,18 @@ class LivePipeline:
                 known_people=known_people,
             )
 
+        # ---- ConversationBridge (E31): live transcripts -> BrainLive loop -----
+        # Final AudioRT segments are injected into the V18.8 conversational engine
+        # (turn buffer -> plan_live_dispatch -> hot loop -> H1 -> delivery queue).
+        # The bridge owns its OWN BrainLive live session (a real brainlive_sessions
+        # row via start_live_session), distinct from the arbitrary transport
+        # ``session_id`` used for scene deltas.
+        self.conversation: Any = conversation_bridge
+        if self.conversation is None and enable_conversation:
+            self.conversation = globals()["conversation_bridge"].ConversationBridge(
+                person_id=self.person_id,
+            )
+
     # ------------------------------------------------------------- push helpers
     def set_status_sink(self, cb: Callable[[dict[str, Any]], Any]) -> None:
         self._status_cb = cb
@@ -298,15 +313,29 @@ class LivePipeline:
 
     def on_audio_chunk(self, samples: np.ndarray, src_rate: int) -> list[dict[str, Any]]:
         intents = self.audio.push_audio(samples, src_rate)
-        # Feed final transcripts to the scene adapter as conversation context.
-        if self.scene_adapter is not None:
-            for it in intents:
-                content = it.get("content") if isinstance(it, dict) else None
-                if isinstance(content, dict) and content.get("final") and content.get("text"):
-                    try:
-                        self.scene_adapter.note_transcript(str(content.get("text")))
-                    except Exception:
-                        pass
+        # Feed final transcripts two ways: (1) as scene conversation context for
+        # the E28 scene adapter, and (2) into the V18.8 conversational loop via
+        # the E31 ConversationBridge (turn buffer -> policy -> H1 -> queue).
+        for it in intents:
+            content = it.get("content") if isinstance(it, dict) else None
+            if not (isinstance(content, dict) and content.get("final") and content.get("text")):
+                continue
+            text = str(content.get("text"))
+            if self.scene_adapter is not None:
+                try:
+                    self.scene_adapter.note_transcript(text)
+                except Exception:
+                    pass
+            if self.conversation is not None:
+                try:
+                    self.conversation.ingest_segment(
+                        text,
+                        language=content.get("language"),
+                        is_final=True,
+                        event_id=it.get("ui_intent_id"),
+                    )
+                except Exception:
+                    pass
         return intents
 
     def end_session(self, *, place_hint: str | None = None) -> str | None:
@@ -356,6 +385,11 @@ class LivePipeline:
         if self.scene_adapter is not None:
             m["hot_context_builds"] = self.scene_adapter.metrics.get("hot_context_builds", 0)
             m["deliveries_enqueued"] = self.scene_adapter.metrics.get("deliveries_enqueued", 0)
+        if self.conversation is not None:
+            cm = self.conversation.metrics
+            m["conversation_turns"] = cm.get("conversation_turns", 0)
+            m["h1_candidates"] = cm.get("h1_candidates", 0)
+            m["hot_cycles"] = cm.get("hot_cycles", 0)
         if self.ingress is not None and hasattr(self.ingress, "matcher"):
             try:
                 m["envelope_match"] = self.ingress.matcher.stats()
