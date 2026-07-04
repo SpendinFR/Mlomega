@@ -144,7 +144,16 @@
       "Bash(python -m pytest tests/v19/test_e27_pipeline.py::test_focus_what_is_degrades_when_ollama_absent -q)",
       "Bash(python -m pytest tests/test_v18_8_1_evidence_connected.py -q)",
       "Bash(python -m pytest tests/ -k \"v18\" -q)",
-      "Bash(python -m pytest tests/ -q)"
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(python scripts/bench_v19_sim.py --vision --frames 200)",
+      "Read(//c/Program Files/NVIDIA GPU Computing Toolkit/**)",
+      "Bash(python -c \"import ctranslate2; print\\('ct2 cuda devices:', ctranslate2.get_cuda_device_count\\(\\)\\)\")",
+      "Bash(python -c \"import torch; print\\('torch', torch.__version__, 'cuda', torch.cuda.is_available\\(\\)\\)\")",
+      "Bash(python -m venv /tmp/ortgpu)",
+      "Bash(/tmp/ortgpu/Scripts/python.exe -m pip install --quiet onnxruntime-gpu numpy opencv-python-headless)",
+      "Bash(/tmp/ortgpu/Scripts/python.exe -m pip install --quiet \"nvidia-cudnn-cu12==9.*\" nvidia-cublas-cu12 nvidia-cuda-runtime-cu12)",
+      "Bash(rm -rf /tmp/ortgpu 2>/dev/null; echo \"cleaned isolated venv\")",
+      "Bash(python scripts/bench_v19_sim.py --vision --frames 300)"
     ]
   }
 }
