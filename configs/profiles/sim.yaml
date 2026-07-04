@@ -1,0 +1,15 @@
+﻿# Simulator profile: fake_xr_device + companion-web, no real hardware.
+video:
+  ingress_port: 8704
+  datachannel_port: 8706
+  target_resolution: 720p
+  target_fps: 15
+  source: fake_xr_device
+vision:
+  detector_fps_min: 5
+  detector_fps_max: 10
+  queue_size: 1
+gpu:
+  max_live_vram_ratio: 0.90
+  degrade_order: [detector_floor, pause_changes, refuse_vlm]
+  simulate_no_gpu: true

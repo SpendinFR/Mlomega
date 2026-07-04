@@ -45,6 +45,31 @@ namespace MLOmega.XR.Core
             Deg270 = 270
         }
 
+        /// <summary>Current rotation stamped on every envelope (0/90/180/270).</summary>
+        public FrameRotation Rotation => _rotation;
+
+        /// <summary>
+        /// Set the frame rotation stamped on subsequent envelopes. Driven by
+        /// <c>OrientationGuard</c> (E29 §3b) from the gravity vector so a phone hung
+        /// vertically (capture-only) reports its true sensor orientation; the PC
+        /// un-rotates before vision (see live_pipeline.deorient_frame). Rounds to the
+        /// nearest 90° bucket. Returns true when the value changed.
+        /// </summary>
+        public bool SetRotation(int degrees)
+        {
+            int q = ((Mathf.RoundToInt(degrees / 90f) % 4) + 4) % 4;
+            FrameRotation next = q switch
+            {
+                1 => FrameRotation.Deg90,
+                2 => FrameRotation.Deg180,
+                3 => FrameRotation.Deg270,
+                _ => FrameRotation.Deg0,
+            };
+            if (next == _rotation) return false;
+            _rotation = next;
+            return true;
+        }
+
         /// <summary>
         /// Raised for each published frame. The Texture is owned by the adapter and
         /// reused; consumers must not dispose it. The FrameEnvelope is reused across

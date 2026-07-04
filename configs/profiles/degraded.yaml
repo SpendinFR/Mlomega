@@ -1,0 +1,14 @@
+﻿# Degraded profile: reduced cadences under GPU/network pressure (handoff Â§3.6).
+# Coherent with rtx3070.yaml; the GpuArbiter/degraded state machine floors here.
+video:
+  ingress_port: 8704
+  datachannel_port: 8706
+  target_resolution: 540p
+  target_fps: 15
+vision:
+  detector_fps_min: 5
+  detector_fps_max: 5
+  queue_size: 1
+gpu:
+  max_live_vram_ratio: 0.80
+  degrade_order: [detector_floor, pause_changes, refuse_vlm]
