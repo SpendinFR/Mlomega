@@ -100,6 +100,14 @@ namespace MLOmega.XR.Editor
             AssignPrivate(boot, "_broker", broker);
             AssignPrivate(boot, "_source", source);
 
+            // --- EventSystem ---------------------------------------------------
+            // CorrectionChip supports pointer clicks (IPointerClickHandler), but on
+            // device it is normally driven by gesture/voice via Activate(); we add a
+            // bare EventSystem (no input module, to avoid coupling to a specific
+            // input backend) so the UI hierarchy is complete.
+            var esGo = new GameObject("EventSystem",
+                typeof(UnityEngine.EventSystems.EventSystem));
+
             // --- Light ---------------------------------------------------------
             var lightGo = new GameObject("Directional Light");
             var light = lightGo.AddComponent<Light>();

@@ -7,7 +7,8 @@
         "MLOmega.XR.Scene",
         "MLOmega.XR.Transport",
         "MLOmega.Contracts",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"
