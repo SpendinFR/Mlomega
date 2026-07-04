@@ -19,12 +19,14 @@ Issu de l'audit d'alignement vision↔livré du 2026-07-04. Principe directeur :
 **Constat** : après wake word, seuls des cas codés (où-est/what_is/ocr) ; pas de multi-tour ; pas de lancement d'apps ; `llm: openai/gemini` = config sans client.
 **Faire** : routeur d'intentions général (grammaire locale rapide + repli parsing LLM live léger pour le reste), **multi-tour** (contexte de la dernière commande/réponse/cible : « et ça ? », « zoom dessus », « traduis-le ») ; actions Android (Intents : Maps navigation, YouTube, app arbitraire, volume/luminosité lunettes via one-xr si utile) ; **toggles UI à la voix** (« cache tout », « mode Free Guy », « pause privée ») branchés au broker/density + câbler le geste balayage Kotlin→Unity déjà émis ; **mode payant** : clients OpenAI/Gemini/Anthropic derrière `LLMProvider`/`VisionModelProvider` (bascule vocale « mode payant » / retour local, indicateur StatusBar cloud actif, estimation de coût par requête affichée, politique de données du profil respectée).
 **Test** : chaîne voix simulée → intent routé → action/toggle ; bascule cloud opt-in mockée + réelle si clé fournie.
+**Ajout inventaire cœur (2026-07-04)** : intent « interroge ma mémoire » → brancher le routeur Brain2 riche (`brain2_router_v14_2.ask_brain2`, aujourd'hui CLI-only) plutôt que le `/query` simple d'api.py — poser une question à sa mémoire depuis les lunettes.
 
 ## E34 — Proactivité réelle & hot context device
 
 **Constat** : les prédictions nocturnes ne sont pas injectées dans le live ; `entities_hot` du téléphone ne reçoit que la vision ; 3 situations proactives seulement.
 **Faire** : charger les prédictions/attentions du jour (life model store + outcomes) dans le HotSceneContext du scene_adapter → suggestions proactives contextuelles (« tu voulais racheter X », routine déviée, promesse due) ; **prefetch des relation packs** vers le SceneCache device à la reconnaissance d'une personne (latence zéro pour la ContextCard) ; **briefing du matin** (première session du jour → carte résumé : agenda déduit, prédictions, choses à ne pas oublier).
 **Test** : prédiction du jour en base → scène correspondante simulée → suggestion proactive en queue ; briefing généré à l'ouverture de session.
+**Ajouts inventaire cœur (2026-07-04) — moteurs nocturnes à consommer EN LIVE (P1)** : (a) `proactive_interventions_v14_7` — généré la nuit seulement aujourd'hui, à consulter/déclencher en session ; (b) `v18_predictive_retrieval` — la récupération prédictive dense doit enrichir le contexte live, pas seulement la calibration nocturne ; (c) `microscope`/`discourse_context` — l'analyse fine du discours (fils de sujets, actes de parole) doit tourner sur les tours live d'E31, pas seulement sur l'import batch ; (d) P2 : exposer en session les questions de `clarification_inbox_v14_8` générées la nuit (le système pose SA question au bon moment).
 
 ## E35 — Sorties : voix, correction, replay
 
