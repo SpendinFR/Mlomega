@@ -49,12 +49,22 @@ namespace MLOmega.XR.UI.Components
             _theme = theme;
             _accent = theme != null ? theme.RimColor : Color.white;
 
-            var go = new GameObject("GlassPanel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            // A world-space Canvas so this is genuine UGUI in the XR world. 1 canvas
+            // unit == 1 world metre (root scale 1), so sizes/font are in metres.
+            var go = new GameObject("GlassPanel",
+                typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
+            var canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
             Root = go.GetComponent<RectTransform>();
             Root.SetParent(parent, false);
             Root.sizeDelta = size;
 
-            Background = go.GetComponent<Image>();
+            var bgGo = new GameObject("Bg", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            var bgRt = bgGo.GetComponent<RectTransform>();
+            bgRt.SetParent(Root, false);
+            bgRt.anchorMin = Vector2.zero; bgRt.anchorMax = Vector2.one;
+            bgRt.offsetMin = Vector2.zero; bgRt.offsetMax = Vector2.zero;
+            Background = bgGo.GetComponent<Image>();
             Background.material = glassMaterial;
             Background.raycastTarget = false;
             Background.color = Color.white;
@@ -73,7 +83,7 @@ namespace MLOmega.XR.UI.Components
             var go = new GameObject(name, typeof(RectTransform));
             var rt = go.GetComponent<RectTransform>();
             rt.SetParent(parent, false);
-            var tmp = go.AddComponent<TextMeshPro>();
+            var tmp = go.AddComponent<TextMeshProUGUI>();
             tmp.fontSize = fontSize;
             tmp.enableAutoSizing = false;
             tmp.fontStyle = style;
