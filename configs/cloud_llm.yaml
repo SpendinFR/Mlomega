@@ -1,0 +1,28 @@
+# MLOmega V19 — E33 cloud LLM providers (paid mode)
+#
+# Endpoints are stable, long-lived API surfaces; default models are the current
+# low-latency choices and are CONFIGURABLE here so a model rename never requires
+# a code change (verified 2026-07: OpenAI chat/completions, Gemini generateContent).
+#
+# cost_eur_per_question is a rough estimate shown to the user on the "mode payant"
+# switch reply ("~0,01-0,03 €/question"). It is intentionally a range, not a bill.
+
+openai:
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-5.4-mini"
+  api_key_env: "OPENAI_API_KEY"
+  cost_eur_per_question: [0.01, 0.03]
+  timeout_s: 30
+
+gemini:
+  base_url: "https://generativelanguage.googleapis.com/v1beta"
+  model: "gemini-2.5-flash"
+  api_key_env: "GEMINI_API_KEY"
+  cost_eur_per_question: [0.005, 0.02]
+  timeout_s: 30
+
+ollama:
+  base_url: "http://127.0.0.1:11434"
+  model: null            # null -> the core's configured default
+  cost_eur_per_question: [0.0, 0.0]
+  timeout_s: 60

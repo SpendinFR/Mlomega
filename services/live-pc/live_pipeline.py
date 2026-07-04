@@ -58,6 +58,9 @@ face_identity = _load_sibling("face_identity", "face_identity.py")
 voice_identity_live = _load_sibling("voice_identity_live", "voice_identity_live.py")
 identity_fusion = _load_sibling("identity_fusion", "identity_fusion.py")
 enrollment_watcher = _load_sibling("enrollment_watcher", "enrollment_watcher.py")
+llm_providers = _load_sibling("v19_llm_providers", "llm_providers.py")
+memory_query = _load_sibling("v19_memory_query", "memory_query.py")
+intent_router = _load_sibling("v19_intent_router", "intent_router.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -153,6 +156,8 @@ class LivePipeline:
         face_embedder: Any = None,
         voice_embedder: Any = None,
         identity_frame_interval: int = 30,
+        enable_intents: bool = False,
+        vision_focus_handler: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         self.session_id = session_id
         self.ingress = ingress
@@ -289,6 +294,32 @@ class LivePipeline:
                 emit_ui_intent=self._push_intent,
             )
 
+        # ---- IntentRouter (E33): voice + menu → one execution path -----------
+        # The general router ABSORBS the enrollment_watcher as one of its handlers
+        # (identity commands are pre-routed before the general grammar). The LLM
+        # router owns the local<->cloud switch (paid mode) and the parse fallback;
+        # memory_query routes "interroge ma mémoire" to the rich Brain2 router.
+        self.enable_intents = enable_intents
+        self.llm_router: Any = None
+        self.memory_query: Any = None
+        self.intents: Any = None
+        self.vision_focus_handler = vision_focus_handler
+        if enable_intents:
+            self.llm_router = llm_providers.LLMRouter(
+                profile=self.user_profile,
+                on_cloud_event=self._push_intent,
+            )
+            self.memory_query = memory_query.MemoryQuery(person_id=self.person_id)
+            self.intents = intent_router.IntentRouter(
+                vision_focus=self._route_vision_focus,
+                on_device_command=self._push_device_command,
+                ask_memory=self.memory_query.ask,
+                llm_router=self.llm_router,
+                enrollment=self.enrollment,
+                emit_ui_intent=self._push_intent,
+                person_id=self.person_id,
+            )
+
     # ------------------------------------------------------------- push helpers
     def set_status_sink(self, cb: Callable[[dict[str, Any]], Any]) -> None:
         self._status_cb = cb
@@ -299,6 +330,24 @@ class LivePipeline:
                 self.ingress.send_ui_intent(json.dumps(intent))
             except Exception:
                 pass
+
+    def _push_device_command(self, cmd: dict[str, Any]) -> None:
+        """Push a device_command message to Unity over the same DataChannel (E33 §4)."""
+        if self.ingress is not None and hasattr(self.ingress, "send_ui_intent"):
+            try:
+                self.ingress.send_ui_intent(json.dumps(cmd))
+            except Exception:
+                pass
+
+    def _route_vision_focus(self, request: dict[str, Any]) -> Any:
+        """Bridge a router vision intent (what_is/find/ocr/zoom) to the vision handler.
+
+        A handler injected by the pipeline owner (which holds the current frame)
+        takes precedence; otherwise there is no frame here, so return None (the
+        router still records the target for multi-turn deixis)."""
+        if self.vision_focus_handler is not None:
+            return self.vision_focus_handler(request)
+        return None
 
     def _on_scene_delta(self, delta: dict[str, Any]) -> None:
         # Push to device (DataChannel) and mirror to WorldBrain (E28) callback.
@@ -424,7 +473,16 @@ class LivePipeline:
                         content["speaker_label"] = vres.get("name")
                 except Exception:
                     pass
-            if self.enrollment is not None:
+            # E33: the IntentRouter is the single entry for final transcripts; it
+            # ABSORBS the enrollment_watcher (identity commands are pre-routed
+            # inside it). When intents are disabled, fall back to the standalone
+            # enrollment watcher so E32 behaviour is preserved verbatim.
+            if self.intents is not None:
+                try:
+                    self.intents.on_transcript(text)
+                except Exception:
+                    pass
+            elif self.enrollment is not None:
                 try:
                     self.enrollment.on_transcript(text)
                 except Exception:
@@ -505,6 +563,16 @@ class LivePipeline:
             m["corrections"] = em.get("corrections", 0)
         if self.face is not None:
             m["face_matches"] = self.face.metrics.get("matches", 0)
+        if self.intents is not None:
+            im = self.intents.metrics
+            m["intents_routed"] = im.get("intents_routed", 0)
+            m["intent_unknown"] = im.get("intent_unknown", 0)
+            m["grammar_hits"] = im.get("grammar_hits", 0)
+            m["multiturn_hits"] = im.get("multiturn_hits", 0)
+            m["llm_fallbacks"] = im.get("llm_fallbacks", 0)
+        if self.llm_router is not None:
+            m["cloud_mode"] = self.llm_router.mode
+            m["cloud_active"] = self.llm_router.cloud_active
         if self.ingress is not None and hasattr(self.ingress, "matcher"):
             try:
                 m["envelope_match"] = self.ingress.matcher.stats()
