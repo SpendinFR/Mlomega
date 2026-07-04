@@ -3,6 +3,9 @@
     "rootNamespace": "MLOmega.XR.Tests",
     "references": [
         "MLOmega.XR.Core",
+        "MLOmega.XR.UI",
+        "MLOmega.XR.Scene",
+        "MLOmega.XR.Transport",
         "MLOmega.Contracts",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"

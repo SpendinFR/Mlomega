@@ -208,9 +208,18 @@ namespace MLOmega.XR.UI.Components
 
         protected virtual void Update()
         {
-            if (Phase == UIComponentPhase.Idle) return;
+            Tick(Time.unscaledTime, Time.unscaledDeltaTime);
+        }
 
-            float dt = Time.unscaledDeltaTime;
+        /// <summary>
+        /// Deterministic lifecycle step. Public so EditMode tests (and any headless
+        /// driver) advance the animation + receipt timeline without a running player
+        /// loop, mirroring SceneCache.Tick / UIIntentBroker.Tick.
+        /// <paramref name="now"/> is the current unscaled time in seconds.
+        /// </summary>
+        public void Tick(float now, float dt)
+        {
+            if (Phase == UIComponentPhase.Idle) return;
 
             // Alpha easing, capped so the whole transition stays <=200 ms.
             float fadeSeconds = _fadeTarget > 0.5f
@@ -232,7 +241,7 @@ namespace MLOmega.XR.UI.Components
                 if (!_displayedSent && _alpha > 0.01f)
                 {
                     _displayedSent = true;
-                    _visibleSince = Time.unscaledTime;
+                    _visibleSince = now;
                     EmitReceipt("displayed", null);
                 }
                 if (_alpha >= 0.999f)
@@ -245,7 +254,7 @@ namespace MLOmega.XR.UI.Components
             {
                 // "seen" after a prudent dwell — exposure, never comprehension.
                 if (!_seenSent && _visibleSince >= 0f &&
-                    Time.unscaledTime - _visibleSince >= _seenDwellSeconds)
+                    now - _visibleSince >= _seenDwellSeconds)
                 {
                     _seenSent = true;
                     EmitReceipt("seen", null);
