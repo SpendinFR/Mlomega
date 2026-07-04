@@ -136,15 +136,86 @@ async def webrtc_async(frames: int = 300, fps: float = 30.0, port: int = 8795) -
     }
 
 
+def load_visionrt():
+    import importlib.util
+
+    # tracking must be importable by name before visionrt loads it.
+    for name, rel in (("v19_tracking", "services/live-pc/tracking.py"),
+                      ("v19_visionrt", "services/live-pc/visionrt.py")):
+        path = ROOT / rel
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec and spec.loader
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules["v19_visionrt"]
+
+
+def vision_bench(frames: int = 200) -> dict[str, object]:
+    """Real detector/tracker bench on this machine (E27 §5).
+
+    Feeds synthetic 720p frames through the full VisionRT frame path and reports
+    the real ``vision_infer_ms`` P50/P95 plus effective detector/tracker fps.
+    """
+    visionrt = load_visionrt()
+    model = ROOT / "models" / "yolox_nano.onnx"
+    if not model.exists():
+        return {"mode": "vision", "error": "models/yolox_nano.onnx missing (run fetch_models_v19.py)"}
+    import numpy as np
+
+    det = visionrt.YoloxDetector(str(model))
+    vr = visionrt.VisionRT(detector=det, session_id="bench")
+    vr.keyframes.change_threshold = 2.0  # disable keyframe writes for the bench
+
+    class _Env:
+        def __init__(self, i):
+            self.frame_id = f"bench-{i}"
+            self.captured_at_utc = None
+
+    rng = np.random.default_rng(0)
+    base = (rng.uniform(0, 255, (720, 1280, 3))).astype(np.uint8)
+    t_feed = 1.0 / 30.0  # 30 fps decoded feed
+    t = 0.0
+    wall0 = time.perf_counter()
+    for i in range(frames):
+        # Moving scene: shift horizontally so the detector stays busy.
+        frame = np.roll(base, (i * 12) % 1280, axis=1)
+        vr.process_frame(frame, _Env(i), now=t)
+        t += t_feed
+    wall = time.perf_counter() - wall0
+    snap = vr.metrics.snapshot()
+    detector_fps = snap["detector_frames"] / wall if wall else 0.0
+    tracker_fps = snap["tracker_frames"] / wall if wall else 0.0
+    return {
+        "mode": "vision",
+        "device": "cuda" if det.on_gpu else "cpu",
+        "providers": det.providers,
+        "model": model.name,
+        "frames_fed": frames,
+        "vision_infer_ms_p50": round(float(snap["vision_infer_ms_p50"]), 3),
+        "vision_infer_ms_p95": round(float(snap["vision_infer_ms_p95"]), 3),
+        "detector_frames": snap["detector_frames"],
+        "tracker_frames": snap["tracker_frames"],
+        "scene_deltas": snap["scene_delta_rate"],
+        "wall_s": round(wall, 3),
+        "effective_detector_fps": round(detector_fps, 2),
+        "effective_tracker_fps": round(tracker_fps, 2),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--webrtc", action="store_true", help="run real aiortc loopback bench")
     parser.add_argument("--sim", action="store_true", help="run in-memory queue bench (default)")
+    parser.add_argument("--vision", action="store_true", help="run real detector/tracker bench")
     parser.add_argument("--frames", type=int, default=None)
     parser.add_argument("--fps", type=float, default=30.0)
     args = parser.parse_args()
 
-    if args.webrtc:
+    if args.vision:
+        frames = args.frames if args.frames is not None else 200
+        print(json.dumps(vision_bench(frames=frames), indent=2))
+    elif args.webrtc:
         frames = args.frames if args.frames is not None else 300
         print(json.dumps(asyncio.run(webrtc_async(frames=frames, fps=args.fps)), indent=2))
     else:

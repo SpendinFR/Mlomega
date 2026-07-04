@@ -1,3 +1,9 @@
+# MLOmega V19 model manifest.
+#
+# Weights live under models/ (git-ignored). Fetch + verify with:
+#   python scripts/fetch_models_v19.py
+# Each fetchable entry carries url + sha256 + license so the download is
+# reproducible and auditable (handoff §4.1 / E27 ADR).
 models:
   live_llm:
     provider: ollama
@@ -9,7 +15,43 @@ models:
     default: qwen3.5:9b-q4_K_M
     license: model-card-required
     phase: nocturne
+  vlm:
+    provider: ollama
+    # Targeted VLM crop, one job at a time (handoff §3.6 / §4.1). Pulled via
+    # `ollama pull`, not this fetch script. Env override: MLOMEGA_VLM_MODEL.
+    default: moondream
+    license: model-card-required
+    max_vram_mb: 5632
+
+  # --- Fetchable ONNX / CTranslate2 weights (scripts/fetch_models_v19.py) ---
   detector:
     provider: onnx_local
-    default: yolox-nano.onnx
+    default: yolox_nano.onnx
+    # Megvii YOLOX-Nano, official ONNX release asset. Apache-2.0 (permissive):
+    # chosen over an Ultralytics-exported YOLO-nano to avoid the AGPL-3.0 weight
+    # taint that an ultralytics export carries (ADR §E27).
     license: Apache-2.0
+    path: models/yolox_nano.onnx
+    url: https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx
+    sha256: c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d
+    input_size: 416
+    max_vram_mb: 512
+
+  asr:
+    provider: faster_whisper
+    # faster-whisper `small`, int8, GPU if CUDA present else CPU. Downloaded on
+    # first use into the HuggingFace cache by faster-whisper itself (CTranslate2
+    # conversion of openai/whisper-small). MIT (faster-whisper) / Whisper weights.
+    default: small
+    compute_type: int8
+    license: MIT
+    max_vram_mb: 1024
+
+  translate:
+    provider: argos_translate
+    # Argos Translate (CTranslate2, MIT). Offline NMT, no LLM. Language packs
+    # installed via `argostranslate.package` into the Argos data dir on first use
+    # (fetch_models_v19.py --argos installs en<->fr). zh->fr installed if a pack
+    # is available in the index.
+    license: MIT
+    pairs: [en-fr, fr-en]

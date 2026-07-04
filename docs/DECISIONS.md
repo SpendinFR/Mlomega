@@ -295,3 +295,67 @@ Section E25 (seconde moitié ; `SceneCache`/`SceneCacheConfig` §9.1 et `UIInten
 - **Scheduler** : détecteurs natifs (HandLandmarker, ASR) activés à la demande par le ReflexScheduler Unity (§9.4 — jamais tous en parallèle) ; budget de skills simultanées en config.
 - **Aucun LLM/VLM dans ce chemin** (handoff §3.2) : tous les calculateurs sont locaux et spécialisés ; FocusSearch interroge VisionRT par DataChannel uniquement quand connecté, sinon réponse honnête locale.
 - **ReflexEvents agrégés** par `aggregate_key` avec fenêtre glissante ; une sévérité `critical` est flushée immédiatement (test dédié).
+
+
+## 2026-07-04 — E27 VisionRT + AudioRT PC (ADR)
+
+Tout E27 est du Python testable sur la machine cible (RTX 3070) ; les tests sont
+exécutés et verts ici (pas de dépendance matériel externe).
+
+- **Détecteur : YOLOX-nano ONNX officiel Megvii** (release `0.1.1rc0`,
+  `yolox_nano.onnx`, sha256 `c789161e…`, entrée + provenance dans
+  `configs/MODEL_MANIFEST.yaml`). **Licence Apache-2.0** — choisi contre un
+  YOLO-nano exporté via Ultralytics dont le poids exporté hériterait de l'AGPL-3.0.
+  Sortie standard `[1,3549,85]` (4 bbox + obj + 80 classes COCO), décodée
+  maison (grilles/strides, NMS numpy). ONNX Runtime : sélectionne
+  `CUDAExecutionProvider` si présent, sinon CPU. Sur cette machine c'est la
+  build CPU (les tests V18 en dépendent) — détecteur mesuré à P50 9,9 ms / P95
+  10,5 ms, largement sous budget ; le chemin GPU est prêt sans changement de code.
+  Tentative `onnxruntime-gpu` en venv isolé : provider CUDA détecté mais retombée
+  CPU faute de cuDNN 9 apparié (friction packaging Windows) — non bloquant,
+  budget déjà tenu.
+- **Tracker : ByteTrack maison** (`services/live-pc/tracking.py`), sans
+  dépendance lourde : Kalman vitesse-constante 8-dim par track + association IoU
+  gloutonne en deux passes (haute puis basse confiance pour récupérer les
+  occlusions courtes), ids courts stables (`t1`, `t2`…), `age`/`visibility`.
+  `predict_only()` interpole entre deux passes détecteur (contrat §3.6). Tourne
+  toutes les frames (CPU, ~140 fps brut).
+- **Cadence détecteur adaptative 5-15 fps** pilotée par un score de mouvement
+  inter-frames (delta luma moyen) + demande de focus ; bornes et seuils
+  (`motion_low/high`) dans `configs/profiles/rtx3070.yaml`, jamais en dur.
+  Vérifié : scène statique → 5 fps, mouvement → monte ; sur bench 300 frames le
+  détecteur n'a tourné que sur 106 (le reste interpolé).
+- **OCR : rapidocr_onnxruntime (Apache-2.0)** sur crop uniquement, plafond
+  `max_roi_px`, jamais plein écran ; classe GPU `ocr`.
+- **VLM crop : Ollama un-job-à-la-fois**, sémaphore 1, admission `vlm` via
+  GpuArbiter, timeout court ; Ollama injoignable → `status:"vlm_unavailable"`,
+  `truth_level:"inferred"`, jamais de blocage. Testé pour de vrai avec Ollama
+  éteint (chemin dégradé honnête).
+- **VAD : webrtcvad** (ADR) plutôt que silero-onnx : déjà dépendance, pas de
+  poids ONNX supplémentaire, déterministe sur frames 10/20/30 ms, CPU pur donc
+  jamais en concurrence GPU avec le détecteur.
+- **ASR : faster-whisper `small` int8**, `device=cuda` si CTranslate2 CUDA
+  dispo (c'est le cas ici — mesuré ~200-380 ms/segment sur la RTX 3070, sous le
+  budget partiel < 1 s), sinon CPU. Détection de langue par whisper. **Classe GPU
+  dédiée `asr`** ajoutée aux budgets du profil et au GpuArbiter, placée dans le
+  plancher réflexe protégé (jamais budget-refusée — §3.6 « ne jamais toucher aux
+  sous-titres »).
+- **Traduction : Argos Translate (CTranslate2, MIT), sans LLM.** Paires en↔fr
+  installées via `fetch_models_v19.py --argos` ; **zh→fr absent de l'index Argos**
+  → non installé, dégradation honnête `no_pack` (noté au manifest). Vérifié
+  fr→en de bout en bout.
+- **Sous-titres = chemin réflexe** : `UIIntent subtitle` (partiel puis final)
+  poussés directement via le DataChannel du gateway (`producer=ultralive`),
+  jamais par la queue BrainLive (§3.2). Aucun LLM conversationnel dans ce chemin.
+- **SceneDelta** liée à `source_frame_id`, entities[] (track_id/kind/label/bbox/
+  confidence/visibility/age), changes[] appeared/disappeared, `expires_at` (TTL
+  config). Poussée au device ET disponible en callback pour WorldBrain (E28).
+- **Sélecteur de keyframes** (score histogramme + mouvement, espacement minimal)
+  → `v19_keyframes.register_xr_keyframe` (insert_only `vision_frames`,
+  `capture_mode='xr_keyframe'`) : le pont E14 vers la chaîne nocturne, en
+  production live. Vérifié : keyframe → ligne `vision_frames` `xr_keyframe`.
+- **Dégradé (`degraded.py`)** : `apply_action_level` mappe l'échelle §3.6 sur
+  VisionRT — `detector_floor` clampe à `fps_min`, `pause_change_detection` gèle
+  keyframes + changes, `refuse_vlm` refuse le VLM ; tracker et sous-titres jamais
+  touchés. Métriques (`vision_infer_ms`, `ocr_ms`, `vlm_queue_depth`,
+  `scene_delta_rate`, drops) exposées en `/metrics` (`live_pipeline.py`).

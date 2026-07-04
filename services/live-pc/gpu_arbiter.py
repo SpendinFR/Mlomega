@@ -26,12 +26,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-JobClass = Literal["tracker", "detector", "ocr", "vlm", "deep", "live_llm"]
+JobClass = Literal["tracker", "detector", "asr", "ocr", "vlm", "deep", "live_llm"]
 
 # Guide §10.4 priority order (higher = protected first). Never preempt tracker.
+# ASR (faster-whisper subtitles) sits just under the detector: subtitles are a
+# reflex path (handoff §3.6 "never touch the tracker or subtitles") so ASR is
+# protected above the on-demand OCR/VLM/LLM classes.
 _PRIORITY: dict[str, int] = {
     "tracker": 100,
     "detector": 80,
+    "asr": 70,
     "ocr": 50,
     "live_llm": 40,
     "vlm": 30,
@@ -46,6 +50,7 @@ _DEFAULT_PROFILE = Path(__file__).resolve().parents[2] / "configs" / "profiles" 
 _FALLBACK_BUDGETS_MB: dict[str, int] = {
     "tracker": 512,      # CPU-side ByteTrack, tiny GPU footprint
     "detector": 512,     # YOLO-nano FP16 ~0.3 Go
+    "asr": 1024,         # faster-whisper small int8 ~1 Go
     "ocr": 768,          # OCR/embeddings on demand ~0.7 Go
     "live_llm": 3072,    # live 4B q4 ~2.5-3 Go
     "vlm": 5632,         # targeted VLM crop, one job at a time (5.5 Go)
@@ -132,16 +137,21 @@ class GpuArbiter:
             return {"grant": grant, "reason": "gpu_unavailable", "snapshot": snap}
 
         ratio = snap.used_mb / max(1, snap.total_mb)
-        # Global pressure: refuse anything below detector priority.
-        if ratio >= self.max_used_ratio and _PRIORITY[job_class] < _PRIORITY["detector"]:
+        # Protected floor: tracker/detector/asr are the reflex classes handoff
+        # §3.6 says must never be starved ("never touch the tracker or
+        # subtitles"). Everything strictly below asr priority is on-demand and
+        # can be pressure/budget-denied.
+        protected_floor = _PRIORITY["asr"]
+        # Global pressure: refuse on-demand classes only.
+        if ratio >= self.max_used_ratio and _PRIORITY[job_class] < protected_floor:
             self.degraded_reasons.append("gpu_vram_pressure")
             return {"grant": False, "reason": "gpu_vram_pressure", "snapshot": snap}
 
-        # Per-class budget: applies only to on-demand classes (below detector
-        # priority). Resident classes (tracker/detector, handoff §4.1 priority 1)
-        # are never budget-denied — they are the floor the arbiter protects.
+        # Per-class budget: applies only to on-demand classes (below the
+        # protected floor). Resident reflex classes (tracker/detector/asr,
+        # handoff §4.1 priority 1) are never budget-denied.
         budget = self.job_budgets_mb.get(job_class)
-        if budget is not None and snap.used_mb > budget and _PRIORITY[job_class] < _PRIORITY["detector"]:
+        if budget is not None and snap.used_mb > budget and _PRIORITY[job_class] < protected_floor:
             self.degraded_reasons.append(f"budget_exceeded:{job_class}")
             return {
                 "grant": False,
