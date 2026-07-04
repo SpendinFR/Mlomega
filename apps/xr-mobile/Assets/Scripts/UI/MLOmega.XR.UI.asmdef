@@ -6,7 +6,10 @@
         "MLOmega.XR.Scene",
         "MLOmega.XR.Core",
         "MLOmega.XR.Transport",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
