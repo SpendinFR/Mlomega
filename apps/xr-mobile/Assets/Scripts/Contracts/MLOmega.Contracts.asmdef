@@ -1,11 +1,7 @@
 {
-    "name": "MLOmega.XR.Core",
-    "rootNamespace": "MLOmega.XR.Core",
-    "references": [
-        "Unity.TextMeshPro",
-        "Unity.InputSystem",
-        "MLOmega.Contracts"
-    ],
+    "name": "MLOmega.Contracts",
+    "rootNamespace": "MLOmega.Contracts.V19",
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
@@ -22,5 +18,5 @@
             "define": "NEWTONSOFT_JSON"
         }
     ],
-    "noEngineReferences": false
+    "noEngineReferences": true
 }

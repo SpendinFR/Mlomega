@@ -1,20 +1,26 @@
 {
-    "name": "MLOmega.XR.Core",
-    "rootNamespace": "MLOmega.XR.Core",
+    "name": "MLOmega.XR.Tests.EditMode",
+    "rootNamespace": "MLOmega.XR.Tests",
     "references": [
-        "Unity.TextMeshPro",
-        "Unity.InputSystem",
-        "MLOmega.Contracts"
+        "MLOmega.XR.Core",
+        "MLOmega.Contracts",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
+        "nunit.framework.dll",
         "Newtonsoft.Json.dll"
     ],
-    "autoReferenced": true,
-    "defineConstraints": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
     "versionDefines": [
         {
             "name": "com.unity.nuget.newtonsoft-json",

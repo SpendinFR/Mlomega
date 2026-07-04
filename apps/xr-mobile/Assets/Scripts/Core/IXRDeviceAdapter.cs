@@ -79,6 +79,19 @@ namespace MLOmega.XR.Core
         /// <summary>True once the Eye camera capture path is live.</summary>
         bool IsEyeActive { get; }
 
+        /// <summary>
+        /// True when the device renders a stereo rig (two eyes, e.g. XREAL glasses);
+        /// false for flat 2D targets (phone-only). <c>XrSessionController</c> and the
+        /// overlay respect this to choose stereo vs full-screen 2D rendering.
+        /// </summary>
+        bool IsStereo { get; }
+
+        /// <summary>
+        /// The value written to <c>FrameEnvelope.source</c> for frames from this
+        /// adapter (e.g. <c>xreal_eye</c>, <c>simulated</c>, <c>phone_camera</c>).
+        /// </summary>
+        string FrameSource { get; }
+
         /// <summary>Raised whenever <see cref="ConnectionState"/> changes.</summary>
         event Action<DeviceConnectionState> ConnectionStateChanged;
 

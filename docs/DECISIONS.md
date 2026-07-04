@@ -91,3 +91,62 @@ Décisions de conception E22 :
 - **Impossible de compiler ici** : aucun Unity/Android SDK dans ce conteneur. Le C# est écrit pour
   la fidélité doc + rigueur, non vérifié par compilation. La validation finale est **matérielle**
   (S25 + XREAL), via la checklist `apps/xr-mobile/README.md`. E22 n'est pas coché [x].
+
+
+## 2026-07-04 — E23 App Unity noyau (contrats, session, capture, pose, clock-sync)
+
+Section E23. Décisions et divergences consignées :
+
+- **Sérialisation JSON = Newtonsoft.Json (package Unity officiel), pas System.Text.Json.**
+  Les POCOs générés dans `packages/contracts/csharp/` ciblent `System.Text.Json`
+  (`[JsonPropertyName]`) et utilisent un namespace *file-scoped* (C# 10). Unity 6
+  n'embarque pas System.Text.Json et son compilateur par défaut ne garantit pas le
+  namespace file-scoped. Choix : les copies Unity (`Assets/Scripts/Contracts/`) sont
+  réécrites vers `Newtonsoft.Json` (`com.unity.nuget.newtonsoft-json`, package officiel
+  éprouvé, IL2CPP-safe) avec `[JsonProperty]` + namespace *block-scoped*. C'est
+  l'option la plus robuste pour Unity 6 et elle est **réversible** (un seul dossier
+  synchronisé, régénérable). `Editor/SyncContracts.cs` (menu *MLOmega/Contracts/Sync
+  from repo*) recopie depuis la racine du repo et applique la transformation, produisant
+  une sortie identique aux copies committées (source de vérité intacte, jamais éditée à
+  la main). En-tête « copie synchronisée — ne pas éditer » sur chaque fichier.
+- **Collision `ReflexEvent`** : `packages/contracts/csharp/ReflexEvent.cs` ET
+  `HotSceneContext.cs` déclarent chacun une classe `ReflexEvent` dans le même namespace.
+  En Python/module isolé ce n'est pas un problème ; en Unity toutes les `.cs` compilent
+  ensemble → doublon de type. Décision : la copie synchronisée de `HotSceneContext.cs`
+  supprime le `ReflexEvent` imbriqué (le `SyncContracts` fait de même), `ReflexEvent.cs`
+  reste la classe canonique. Divergence côté Unity uniquement, sans toucher aux sources.
+- **Protocole ClockSync** : `services/live-pc/sessionhub.py` est aujourd'hui une classe
+  in-process (`SessionHub`) sans serveur HTTP/WS (le front live-pc arrive en E24). Le
+  client C# reproduit **exactement** la sémantique : `ClockSync.ComputeSample` applique
+  les formules de `complete_clock_sync` — `rtt = (client_recv - client_send) -
+  (server_send - server_recv)` et `offset = ((server_recv - client_send) + (server_send
+  - client_recv)) // 2` avec **division plancher** (comme le `// 2` Python, y compris
+  offsets négatifs). Le meilleur échantillon (RTT min) d'une rafale gagne, comme
+  `current_offset_ns`. Les tests EditMode rejouent les mêmes entrées numériques que
+  `tests/v19/test_sessionhub.py` (offsets -5 ms / +8 ms, tolérance 100 µs) pour prouver
+  la symétrie client/serveur. Transport abstrait (`IClockSyncTransport`) ; l'impl HTTP
+  (`SessionHubClient` + `HttpClockSyncTransport`, `UnityWebRequest`) mappe 1:1 les
+  méthodes du `SessionHub` sur `POST /session/{create,renew,clock-sync}` — le serveur
+  E24 n'aura qu'à exposer ces routes. Gestion d'erreurs réseau réelle (retry borné par
+  config, état `Unsynced`), jamais d'exception propagée.
+- **Extension d'interface `IXRDeviceAdapter`** : ajout de `IsStereo` et `FrameSource`
+  (modification ciblée autorisée : on étend, on ne réécrit pas). Les trois adaptateurs
+  les implémentent ; `XrSessionController` expose `IsStereo` pour que l'overlay/UI
+  choisisse rig stéréo vs 2D plein écran. `PhoneOnlyAdapter` = `IsStereo=false`,
+  `source=phone_camera`, pose identité — cible téléphone-only de premier rang (handoff
+  §3.5), pas un fallback : une caméra absente passe en état `Error` (pas de frames
+  fabriquées, contrairement au simulateur qui, lui, est un chemin de dev assumé).
+- **Sélection d'adaptateur** : `MLOmegaConfig.Adapter` (`auto|xreal|simulated|phone_only`)
+  mappé par `AdapterSelector` sur les couples `display`/`capture` de
+  `configs/user_profile.yaml` (correspondance en commentaire dans `AdapterSelector.cs` et
+  `MLOmegaConfig.cs`). `XrSessionController` utilise la config si assignée, sinon conserve
+  le comportement E22 (simulateur en éditeur, XREAL sur device) — rétrocompatible.
+- **Zéro alloc par frame** : `EyeCaptureSource` réutilise un `FrameEnvelope`, un `Pose` et
+  leurs listes position/rotation ; `FormatFrameId` construit `f_<n>` via `stackalloc`
+  (une seule allocation string, imposée par le contrat). Pose échantillonnée **à la
+  capture** (`PosePublisher.SampleNow`), pas au rendu.
+- **Impossible de compiler ici** (comme E22) : pas de SDK Unity/.NET dans cet
+  environnement (seul le host `dotnet` runtime est présent, aucun SDK). Le C# est écrit
+  pour la fidélité doc + rigueur et relu, non vérifié par compilation. Les tests EditMode
+  sont écrits pour passer au premier clic dans le Test Runner. E23 n'est pas coché [x] :
+  validation Unity/matériel par l'utilisateur, couplée au gate G1.
