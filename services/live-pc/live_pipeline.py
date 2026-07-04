@@ -67,6 +67,62 @@ def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
         return {}
 
 
+def load_user_profile(path: Path | str | None = None) -> dict[str, Any]:
+    """Read ``configs/user_profile.yaml`` (handoff §3.5). Returns {} if absent.
+
+    This is the capability profile written by ``setup_profile.ps1``: ``display``
+    (``companion_web`` | ``phone_only`` | ``xreal_one_pro`` | ``spectacles``),
+    ``capture``, ``llm``, ``vision``, ``asr``, ``cloud_data_policy``. It is read
+    by ``RUN_MLOMEGA_V19.ps1 -SimOnly`` and by :class:`LivePipeline` so that the
+    ``phone_only`` display path is honoured end to end (E29).
+    """
+    p = Path(path) if path else _ROOT / "configs" / "user_profile.yaml"
+    if not p.exists():
+        return {}
+    try:
+        import yaml
+
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+
+
+# Frame rotation applied on the PC when ``FrameEnvelope.rotation`` says the device
+# sensor was rotated. The device streams the pixels as captured (rotated); the PC
+# un-rotates them so the detector/OCR see upright content. This is the PC half of
+# the OrientationGuard capture-only path (E29 §3a). Values are the inverse of the
+# device rotation so that ``apply(device_rotation)`` yields an upright frame.
+_ROTATE_UNDO = {
+    0: None,
+    90: "ROTATE_90_COUNTERCLOCKWISE",
+    180: "ROTATE_180",
+    270: "ROTATE_90_CLOCKWISE",
+}
+
+
+def deorient_frame(frame_bgr: np.ndarray, rotation: int) -> np.ndarray:
+    """Return an upright frame given the device ``rotation`` (0/90/180/270).
+
+    ``rotation`` is the sensor rotation the device stamped in the envelope; the
+    PC un-rotates so vision always sees an upright image (handoff capture-only).
+    When cv2 is unavailable it falls back to numpy ``rot90``.
+    """
+    r = int(rotation or 0) % 360
+    if r == 0:
+        return frame_bgr
+    try:
+        import cv2
+
+        code = getattr(cv2, _ROTATE_UNDO.get(r, ""), None) if _ROTATE_UNDO.get(r) else None
+        if code is not None:
+            return cv2.rotate(frame_bgr, code)
+    except Exception:
+        pass
+    # numpy fallback: rot90 k times (counter-clockwise); undo device CW rotation.
+    k = {90: 1, 180: 2, 270: 3}.get(r, 0)
+    return np.ascontiguousarray(np.rot90(frame_bgr, k=k))
+
+
 class LivePipeline:
     def __init__(
         self,
@@ -83,11 +139,18 @@ class LivePipeline:
         person_id: str | None = None,
         db_path: Any = None,
         known_people: dict[str, dict[str, Any]] | None = None,
+        user_profile: dict[str, Any] | None = None,
+        apply_rotation: bool = True,
     ) -> None:
         self.session_id = session_id
         self.ingress = ingress
         self.arbiter = arbiter
         self.profile = load_profile(profile_path)
+        # Capability profile (handoff §3.5): display=companion_web|phone_only|...
+        self.user_profile = user_profile if user_profile is not None else load_user_profile()
+        self.display = str(self.user_profile.get("display", "companion_web") or "companion_web")
+        self.apply_rotation = apply_rotation
+        self.rotation_corrections = 0
         vcfg = self.profile.get("vision", {}) if isinstance(self.profile, dict) else {}
         acfg = self.profile.get("audio", {}) if isinstance(self.profile, dict) else {}
 
@@ -214,7 +277,14 @@ class LivePipeline:
         return state.event()
 
     # ------------------------------------------------------------------- feeders
-    def on_video_frame(self, frame_bgr: np.ndarray, envelope: Any, *, focus_active: bool = False) -> dict[str, Any] | None:
+    def on_video_frame(self, frame_bgr: np.ndarray, envelope: Any, *, focus_active: bool = False, now: float | None = None) -> dict[str, Any] | None:
+        # OrientationGuard (E29 §3a): un-rotate to upright BEFORE any processing so
+        # detector/OCR see the scene the right way up in capture-only mode.
+        if self.apply_rotation:
+            rot = int(getattr(envelope, "rotation", 0) or 0) % 360
+            if rot:
+                frame_bgr = deorient_frame(frame_bgr, rot)
+                self.rotation_corrections += 1
         # Feed the spatial provider a pose keyframe (E28) before vision runs.
         if self.spatial is not None:
             pose = getattr(envelope, "pose", None)
@@ -224,7 +294,7 @@ class LivePipeline:
                     self.spatial.observe_pose(getattr(envelope, "frame_id", "?"), pd)
                 except Exception:
                     pass
-        return self.vision.process_frame(frame_bgr, envelope, focus_active=focus_active)
+        return self.vision.process_frame(frame_bgr, envelope, focus_active=focus_active, now=now)
 
     def on_audio_chunk(self, samples: np.ndarray, src_rate: int) -> list[dict[str, Any]]:
         intents = self.audio.push_audio(samples, src_rate)
@@ -249,6 +319,11 @@ class LivePipeline:
             return None
 
     def on_focus_request(self, request: dict[str, Any], frame_bgr: np.ndarray, envelope: Any) -> dict[str, Any]:
+        # Same orientation guard on focus (what_is/find/ocr) crops (E29 §3a).
+        if self.apply_rotation:
+            rot = int(getattr(envelope, "rotation", 0) or 0) % 360
+            if rot:
+                frame_bgr = deorient_frame(frame_bgr, rot)
         return self.vision.handle_focus(request, frame_bgr, envelope)
 
     async def run_video(self, *, limit: int | None = None) -> dict[str, Any]:
@@ -264,7 +339,12 @@ class LivePipeline:
 
     # ------------------------------------------------------------------- metrics
     def metrics(self) -> dict[str, Any]:
-        m: dict[str, Any] = {"session_id": self.session_id, "action_level": self._last_action}
+        m: dict[str, Any] = {
+            "session_id": self.session_id,
+            "action_level": self._last_action,
+            "display": self.display,
+            "rotation_corrections": self.rotation_corrections,
+        }
         m.update(self.vision.metrics.snapshot())
         m.update({f"audio_{k}": v for k, v in self.audio.metrics.snapshot().items()})
         if self.worldbrain is not None:

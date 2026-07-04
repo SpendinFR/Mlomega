@@ -7,3 +7,5 @@ codex-*.patch
 # V19 model weights (fetched via scripts/fetch_models_v19.py, see MODEL_MANIFEST.yaml)
 models/
 !models/.gitkeep
+.scenario_runs/
+simulators/scenarios/assets/
