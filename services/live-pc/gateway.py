@@ -253,6 +253,30 @@ class AiortcIngress:
         self._runner: Any | None = None
         self._site: Any | None = None
         self._started = asyncio.Event()
+        # Downlink DataChannel(s): the gateway sends UIIntent JSON back to the
+        # device over the same reliable/ordered ``contracts`` channel it receives
+        # FrameEnvelope/LocalTrack on. ``on_receipt`` is invoked with the raw JSON
+        # text of every non-envelope message (UIReceipt) so callers can route it
+        # to record_delivery_feedback (delivery_adapter.record_receipt).
+        self._channels: set[Any] = set()
+        self.on_receipt: Callable[[str], Any] | None = None
+        self.received_receipts = 0
+
+    def send_ui_intent(self, intent_json: str) -> int:
+        """Send a UIIntent (JSON string) to every open downlink DataChannel.
+
+        Returns the number of channels the intent was written to. Non-blocking;
+        aiortc buffers on the channel. Safe to call once frames/channel are up.
+        """
+        sent = 0
+        for channel in list(self._channels):
+            try:
+                if channel.readyState == "open":
+                    channel.send(intent_json)
+                    sent += 1
+            except Exception:
+                self._channels.discard(channel)
+        return sent
 
     @property
     def offer_url(self) -> str:
@@ -290,19 +314,53 @@ class AiortcIngress:
         from aiohttp import web
 
         params = await request.json()
-        offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+        answer_sdp, answer_type = await self.handle_offer_sdp(params["sdp"], params["type"])
+        return web.json_response({"sdp": answer_sdp, "type": answer_type})
+
+    async def handle_offer_sdp(self, sdp: str, sdp_type: str) -> tuple[str, str]:
+        """Negotiate one WebRTC peer from a raw SDP offer, return the SDP answer.
+
+        Transport-agnostic core of ``_handle_offer``: used by the ingress' own
+        aiohttp ``/offer`` route (backward compatible) *and* by the unified
+        ``POST /webrtc/offer`` FastAPI route in ``sessionhub_http`` so
+        ``fake_xr_device`` and the Android client share one signaling surface.
+        """
+        offer = RTCSessionDescription(sdp=sdp, type=sdp_type)
         pc = RTCPeerConnection()
         self._pcs.add(pc)
 
         @pc.on("datachannel")
         def _on_datachannel(channel: Any) -> None:  # noqa: ANN401
+            # Register as a downlink so the gateway can push UIIntent JSON back.
+            self._channels.add(channel)
+
+            @channel.on("close")
+            def _on_close() -> None:
+                self._channels.discard(channel)
+
             @channel.on("message")
             def _on_message(message: Any) -> None:  # noqa: ANN401
+                # Uplink messages are either FrameEnvelope (video metadata) or
+                # UIReceipt (device acknowledging a UIIntent). Route by shape:
+                # FrameEnvelope carries frame_id + capture_monotonic_ns; UIReceipt
+                # carries ui_intent_id + event.
                 try:
                     payload = json.loads(message)
-                    self.matcher.add(FrameEnvelope.model_validate(payload))
                 except Exception:
-                    pass
+                    return
+                if isinstance(payload, dict) and "capture_monotonic_ns" in payload:
+                    try:
+                        self.matcher.add(FrameEnvelope.model_validate(payload))
+                    except Exception:
+                        pass
+                    return
+                # Anything else is treated as a receipt/return channel message.
+                self.received_receipts += 1
+                if self.on_receipt is not None:
+                    try:
+                        self.on_receipt(message if isinstance(message, str) else json.dumps(payload))
+                    except Exception:
+                        pass
 
         @pc.on("track")
         def _on_track(track: Any) -> None:  # noqa: ANN401
@@ -317,9 +375,7 @@ class AiortcIngress:
         await pc.setRemoteDescription(offer)
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
-        return web.json_response(
-            {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
-        )
+        return pc.localDescription.sdp, pc.localDescription.type
 
     async def _consume_track(self, track: Any, pc: Any) -> None:
         count = 0

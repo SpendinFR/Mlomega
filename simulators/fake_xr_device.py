@@ -276,6 +276,7 @@ class FakeXrWebrtcClient:
         source: str = "fake_xr_device",
         mp4: Path | None = None,
         pose_jsonl: Path | None = None,
+        token: str | None = None,
     ) -> None:
         if not AIORTC_AVAILABLE:
             raise RuntimeError("aiortc/av are not installed; FakeXrWebrtcClient is unavailable")
@@ -288,6 +289,11 @@ class FakeXrWebrtcClient:
         self.source = source
         self.mp4 = mp4
         self.poses = load_pose_jsonl(pose_jsonl) if pose_jsonl else None
+        # When ``token`` is set, the client targets the unified E24 signaling
+        # endpoint ``POST /webrtc/offer`` and includes ``{session_id, token}`` in
+        # the offer body (same surface the Android LiveTransportPlugin uses). When
+        # None it POSTs the bare ``{sdp, type}`` the ingress' own /offer expects.
+        self.token = token
         self.sent_envelopes = 0
 
     async def run(self) -> dict[str, Any]:
@@ -333,14 +339,16 @@ class FakeXrWebrtcClient:
         offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
 
+        offer_body: dict[str, Any] = {
+            "sdp": pc.localDescription.sdp,
+            "type": pc.localDescription.type,
+        }
+        if self.token is not None:
+            # Unified /webrtc/offer endpoint requires the session token.
+            offer_body["session_id"] = self.session_id
+            offer_body["token"] = self.token
         async with aiohttp.ClientSession() as session:
-            async with session.post(
-                self.offer_url,
-                json={
-                    "sdp": pc.localDescription.sdp,
-                    "type": pc.localDescription.type,
-                },
-            ) as resp:
+            async with session.post(self.offer_url, json=offer_body) as resp:
                 answer = await resp.json()
         await pc.setRemoteDescription(
             RTCSessionDescription(sdp=answer["sdp"], type=answer["type"])
@@ -365,8 +373,9 @@ async def _main() -> None:
     parser.add_argument("--mp4", type=Path, help="MP4 to replay (else synthetic)")
     parser.add_argument("--pose-jsonl", type=Path, help="pose JSONL (else synthetic)")
     parser.add_argument("--jsonl", type=Path, help="write generated envelopes to JSONL (in-memory mode)")
-    parser.add_argument("--offer-url", type=str, help="gateway /offer URL -> real WebRTC mode")
+    parser.add_argument("--offer-url", type=str, help="gateway /offer or /webrtc/offer URL -> real WebRTC mode")
     parser.add_argument("--session-id", type=str, default="sim-session")
+    parser.add_argument("--token", type=str, help="session token for the unified /webrtc/offer endpoint")
     args = parser.parse_args()
 
     rotation = 90 if args.rotate90 else args.rotation
@@ -382,6 +391,7 @@ async def _main() -> None:
             source="fake_xr_device",
             mp4=args.mp4,
             pose_jsonl=args.pose_jsonl,
+            token=args.token,
         )
         result = await client.run()
         print(json.dumps(result))

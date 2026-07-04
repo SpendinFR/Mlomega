@@ -150,3 +150,83 @@ Section E23. Décisions et divergences consignées :
   pour la fidélité doc + rigueur et relu, non vérifié par compilation. Les tests EditMode
   sont écrits pour passer au premier clic dans le Test Runner. E23 n'est pas coché [x] :
   validation Unity/matériel par l'utilisateur, couplée au gate G1.
+
+## 2026-07-04 — E24 Transport mobile (SessionHub HTTP, signaling unifié, plugin Android)
+
+Section E24. Décisions et divergences consignées :
+
+- **Serveur HTTP SessionHub** (`services/live-pc/sessionhub_http.py`) : app FastAPI
+  qui **expose** la classe `SessionHub` existante sans la réécrire (chargée par
+  `importlib` comme les tests). Routes/JSON **1:1** avec `SessionHubClient.cs` (E23) :
+  `POST /session/create` → `{session_id, token, created_at_utc}` ;
+  `POST /session/clock-sync {session_id, token, client_send_ns}` →
+  `{server_recv_ns, server_send_ns}` (deux estampes monotones égales, comme
+  `SessionHub` collapse `server_send_ns := server_recv_ns`) ; `POST /session/renew`
+  → nouveau token (rotation + révocation de l'ancien) ; `GET /health`. Auth par le
+  token éphémère (`SessionHub.authenticate`) sur renew/clock-sync → **401** si le
+  couple `(session_id, token)` ne correspond pas. **Port 8710** = `MLOmegaConfig.cs
+  SessionHubPort` (87xx, jamais 8766). L'offset reste calculé côté client
+  (`ClockSync.ComputeSample`), le serveur ne renvoie que les estampes ; le test
+  `tests/v19/test_sessionhub_http.py` **rejoue les fixtures numériques de
+  `test_sessionhub.py`** (+5 ms / −8 ms) pour prouver la symétrie Python/C#/HTTP.
+- **Piège FastAPI** : les symboles FastAPI (`Request`) sont importés **au niveau
+  module**, pas dans `create_app`. FastAPI résout les annotations de route via
+  `typing.get_type_hints` contre `__globals__` de la fonction (pas la closure) ; un
+  `Request` local est mal interprété en paramètre de query → 422. Consigné car
+  contre-intuitif.
+- **Signaling unifié** (`POST /webrtc/offer`, servi par la même app 8710) : SDP offer
+  in → SDP answer out, **token de session exigé**. Le cœur de négociation a été
+  **extrait** de `AiortcIngress._handle_offer` vers `AiortcIngress.handle_offer_sdp`
+  (extension, pas réécriture) ; l'ancienne route aiohttp `/offer` continue de
+  fonctionner (rétrocompatible), le nouvel endpoint FastAPI la réutilise.
+  `fake_xr_device` gagne un paramètre `token` optionnel : présent → il cible
+  `/webrtc/offer` avec `{session_id, token}` (même surface que le futur client
+  Android) ; absent → chemin `/offer` inchangé.
+- **Downlink DataChannel** : `AiortcIngress` enregistre les DataChannels entrants et
+  expose `send_ui_intent(json)` pour renvoyer un UIIntent au device ; le routage des
+  messages montants distingue par forme (FrameEnvelope = `capture_monotonic_ns` ;
+  sinon UIReceipt → callback `on_receipt`). Le test `test_e24_roundtrip.py` prouve le
+  critère de fin E24 côté PC : frame_id/pose intacts, UIIntent renvoyé avec le bon
+  `target_track_id`, UIReceipt remonté jusqu'à `record_delivery_feedback`
+  (`brainlive_intervention_feedback_events_v188`).
+- **Plugin Android** (`apps/xr-mobile/android/livetransport/`, lib Gradle autonome) :
+  **GetStream `io.getstream:stream-webrtc-android:1.3.10`** — dernière version stable
+  (vérifiée sur https://github.com/GetStream/webrtc-android/releases le 2026-07-04 ;
+  coordonnée Maven confirmée via le README GetStream). Choix imposé par le handoff §4
+  (seul binding libwebrtc largement maintenu) ; **figée** au premier build reproductible
+  (risque roadmap Stream). Classes dans le package standard `org.webrtc` → le code est
+  un binding libwebrtc portable si la source change.
+- **Voie capture vidéo GetStream** : `VideoCapturer` custom (`UnityFrameCapturer`) piloté
+  par un `SurfaceTextureHelper`, alimenté par un `VideoFrameFeeder`. Chemin **texture OES
+  zéro-copie** privilégié (`TextureBufferImpl` sur le thread GL du helper, la frame reste
+  sur le GPU jusqu'à l'encodeur H.264) ; **fallback ByteBuffer I420** (`JavaI420Buffer`)
+  pour les modes sans texture partagée (capture-only). C'est la voie **documentée par
+  GetStream/libwebrtc** pour injecter des frames externes (vs un `VideoSource` brut), d'où
+  ce choix. `UnityPushVideoFeeder` = forme *push* JNI-friendly appelée depuis C#.
+- **H.264 low-latency** : préférence codec **explicite dans le SDP** (`SdpCodecPreference`
+  hisse les payloads H264 en tête de `m=video` et force
+  `packetization-mode=1;profile-level-id=42e01f` — constrained-baseline, mono-NAL). Logique
+  = transformation de chaîne pure → **testée hors device** (`SdpCodecPreferenceTest`,
+  `./gradlew test`). Opus 20 ms micro : `minptime=20;usedtx=1;useinbandfec=1` + `a=ptime:20`.
+- **Reconnexion & bitrate adaptatif** : backoff exponentiel **borné** (`BackoffConfig` :
+  delay plafonné, jitter, max_attempts) ; adaptation pilotée par `getStats()` (fraction
+  perdue + RTT depuis `remote-inbound-rtp`), tous les **seuils en config** (`AdaptiveConfig`,
+  jamais en dur) → baisse `maxBitrateBps` + monte l'échelon `scaleResolutionDownBy`, remonte
+  après N sondes saines. États `connected/degraded/reconnecting/disconnected` en callbacks
+  vers Unity. Politique alignée sur GUIDE_V19_REFERENCE §8.4 « Transport vidéo dégradé ».
+- **Config JNI** : les défauts de data-class Kotlin ne sont pas atteignables via
+  `AndroidJavaObject` (JNI ne voit que le constructeur plein) → `LiveTransportConfigFactory.forUnity`
+  (`@JvmStatic`) construit la config avec les seules valeurs que Unity varie.
+- **Bridge Unity** (`Assets/Scripts/Transport/LiveTransportBridge.cs`) : wrapper
+  `AndroidJavaObject` + `AndroidJavaProxy` (callbacks natifs), abonné à
+  `EyeCaptureSource.OnFrame` (E23), pousse la texture œil (`GetNativeTexturePtr` → id OES),
+  relaie UIIntent (désérialisé Newtonsoft) ↓ / UIReceipt ↑, re-émet l'état natif en
+  événements C# marshalés sur le thread principal Unity. **Éditeur/Windows = mode
+  DIRECT_PYTHON** : pas de plugin Android, transport no-op ; le côté PC est exercé par
+  `simulators/fake_xr_device` (chemin `SimulatedDeviceAdapter`) contre le même
+  `/webrtc/offer`. `MLOmegaConfig.WebrtcOfferUrl` ajouté (même host/port que le SessionHub).
+- **Impossible de compiler l'Android ici** : pas d'Android SDK/Gradle dans cet
+  environnement. Le Kotlin est écrit pour la fidélité à l'API GetStream/libwebrtc épinglée
+  et relu ; la compilation + la validation S25 (gate matériel) sont différées. Seuls les
+  tests PC (`test_sessionhub_http`, `test_transport_webrtc` unifié, `test_e24_roundtrip`)
+  sont exécutés et verts ici.
