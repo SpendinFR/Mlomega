@@ -54,6 +54,10 @@ spatial = _load_sibling("v19_spatial", "spatial.py")
 worldbrain = _load_sibling("v19_worldbrain", "worldbrain.py")
 scene_adapter = _load_sibling("v19_scene_adapter", "brainlive_scene_adapter.py")
 conversation_bridge = _load_sibling("v19_conversation_bridge", "conversation_bridge.py")
+face_identity = _load_sibling("face_identity", "face_identity.py")
+voice_identity_live = _load_sibling("voice_identity_live", "voice_identity_live.py")
+identity_fusion = _load_sibling("identity_fusion", "identity_fusion.py")
+enrollment_watcher = _load_sibling("enrollment_watcher", "enrollment_watcher.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -144,6 +148,11 @@ class LivePipeline:
         apply_rotation: bool = True,
         enable_conversation: bool = False,
         conversation_bridge: Any = None,
+        enable_identity: bool = False,
+        face_service_db_path: Any = None,
+        face_embedder: Any = None,
+        voice_embedder: Any = None,
+        identity_frame_interval: int = 30,
     ) -> None:
         self.session_id = session_id
         self.ingress = ingress
@@ -249,6 +258,37 @@ class LivePipeline:
                 person_id=self.person_id,
             )
 
+        # ---- Identity (E32): face + voice + fusion + enrollment ---------------
+        # Face runs on person crops at an ECONOMICAL cadence (new person track or
+        # every N frames), voice on final segments, fusion names WorldBrain person
+        # entities above threshold (scene adapter's ContextCard trigger fires
+        # naturally), enrollment_watcher pre-routes "retiens : c'est X" commands.
+        self.identity_frame_interval = max(1, int(identity_frame_interval))
+        self._frame_counter = 0
+        self._identity_seen_tracks: set[str] = set()
+        self.face: Any = None
+        self.voice_identity: Any = None
+        self.fusion: Any = None
+        self.enrollment: Any = None
+        if enable_identity:
+            fcfg = face_identity.FaceConfig.from_env(self.profile)
+            try:
+                self.face = face_identity.FaceIdentity(
+                    config=fcfg, embedder=face_embedder,
+                    service_db_path=face_service_db_path, arbiter=arbiter,
+                )
+            except Exception:
+                self.face = None
+            self.voice_identity = voice_identity_live.VoiceIdentityLive(embedder=voice_embedder)
+            self.fusion = identity_fusion.IdentityFusion(
+                worldbrain=self.worldbrain, scene_adapter=self.scene_adapter,
+            )
+            self.enrollment = enrollment_watcher.EnrollmentWatcher(
+                face_identity=self.face, voice_identity=self.voice_identity,
+                fusion=self.fusion, person_id=self.person_id,
+                emit_ui_intent=self._push_intent,
+            )
+
     # ------------------------------------------------------------- push helpers
     def set_status_sink(self, cb: Callable[[dict[str, Any]], Any]) -> None:
         self._status_cb = cb
@@ -309,7 +349,48 @@ class LivePipeline:
                     self.spatial.observe_pose(getattr(envelope, "frame_id", "?"), pd)
                 except Exception:
                     pass
-        return self.vision.process_frame(frame_bgr, envelope, focus_active=focus_active, now=now)
+        delta = self.vision.process_frame(frame_bgr, envelope, focus_active=focus_active, now=now)
+        # Identity (E32): face-embed person crops at an economical cadence — on a
+        # newly-seen person track, or every ``identity_frame_interval`` deltas.
+        if delta is not None and self.fusion is not None and self.face is not None:
+            self._frame_counter += 1
+            try:
+                self._run_face_identity(frame_bgr, delta)
+            except Exception:
+                pass
+        return delta
+
+    def _person_entity_id(self, track_id: str) -> str | None:
+        """Best-effort WorldBrain entity_id for a person track (if promoted)."""
+        if self.worldbrain is None:
+            return None
+        return self.worldbrain._track_to_entity.get(track_id)  # type: ignore[attr-defined]
+
+    def _run_face_identity(self, frame_bgr: np.ndarray, delta: dict[str, Any]) -> None:
+        periodic = (self._frame_counter % self.identity_frame_interval) == 0
+        for ent in delta.get("entities") or []:
+            if ent.get("label") != "person":
+                continue
+            track_id = str(ent.get("track_id") or "")
+            if not track_id:
+                continue
+            new_track = track_id not in self._identity_seen_tracks
+            if not (new_track or periodic):
+                continue
+            self._identity_seen_tracks.add(track_id)
+            bbox = ent.get("bbox")
+            crop = self.vision._crop(frame_bgr, bbox) if bbox else None
+            if crop is None or getattr(crop, "size", 0) == 0:
+                continue
+            entity_id = self._person_entity_id(track_id)
+            try:
+                face_res = self.face.match(crop)
+            except Exception:
+                face_res = None
+            # Keep the freshest crop for enrollment ("retiens : c'est X").
+            if self.enrollment is not None:
+                self.enrollment.set_active_track(track_id, entity_id, crop)
+            self.fusion.resolve(entity_id=entity_id, track_id=track_id, face=face_res)
 
     def on_audio_chunk(self, samples: np.ndarray, src_rate: int) -> list[dict[str, Any]]:
         intents = self.audio.push_audio(samples, src_rate)
@@ -326,6 +407,28 @@ class LivePipeline:
                     self.scene_adapter.note_transcript(text)
                 except Exception:
                     pass
+            # Identity (E32): the enrollment_watcher pre-routes "retiens : c'est X"
+            # / "non ce n'est pas X" BEFORE conversation ingestion (a device
+            # command, not a memory turn). Voice matching sets the speaker on the
+            # bridge turn (speaker_person_id / speaker_label) when a wav clip is
+            # available on the intent.
+            wav_path = content.get("audio_path") or content.get("wav_path")
+            if self.voice_identity is not None and wav_path:
+                try:
+                    if self.enrollment is not None:
+                        self.enrollment.set_active_segment(wav_path)
+                    vres = self.voice_identity.match(wav_path)
+                    if vres.get("matched") and self.fusion is not None:
+                        self.fusion.resolve(track_id=None, voice=vres)
+                        content["speaker_person_id"] = vres.get("person_id")
+                        content["speaker_label"] = vres.get("name")
+                except Exception:
+                    pass
+            if self.enrollment is not None:
+                try:
+                    self.enrollment.on_transcript(text)
+                except Exception:
+                    pass
             if self.conversation is not None:
                 try:
                     self.conversation.ingest_segment(
@@ -333,6 +436,7 @@ class LivePipeline:
                         language=content.get("language"),
                         is_final=True,
                         event_id=it.get("ui_intent_id"),
+                        speaker_label=content.get("speaker_label"),
                     )
                 except Exception:
                     pass
@@ -390,6 +494,17 @@ class LivePipeline:
             m["conversation_turns"] = cm.get("conversation_turns", 0)
             m["h1_candidates"] = cm.get("h1_candidates", 0)
             m["hot_cycles"] = cm.get("hot_cycles", 0)
+        if self.fusion is not None:
+            fm = self.fusion.metrics
+            m["identity_matches"] = fm.get("identity_matches", 0)
+            m["named_entities"] = fm.get("named_entities", 0)
+            m["identity_contradictions"] = fm.get("contradictions", 0)
+        if self.enrollment is not None:
+            em = self.enrollment.metrics
+            m["enrollments"] = em.get("enrollments", 0)
+            m["corrections"] = em.get("corrections", 0)
+        if self.face is not None:
+            m["face_matches"] = self.face.metrics.get("matches", 0)
         if self.ingress is not None and hasattr(self.ingress, "matcher"):
             try:
                 m["envelope_match"] = self.ingress.matcher.stats()
