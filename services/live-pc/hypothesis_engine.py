@@ -81,7 +81,8 @@ _ADDRESS_SCHEMA = {
 class HypothesisConfig:
     """Promotion thresholds + signal floors — all config, never hardcoded."""
 
-    min_occurrences: int = 3            # independent concordant observations
+    min_occurrences: int = 3            # concordant observations needed
+    min_sessions: int = 2               # spread over at least this many sessions
     min_cumulative_confidence: float = 1.2  # summed confidence to promote
     min_signal_confidence: float = 0.35     # a single observation must clear this
     contradiction_penalty: float = 0.5      # confidence removed per contradiction
@@ -130,6 +131,9 @@ class Hypothesis:
         for o in self.occurrences:
             total += float(o.confidence) if o.concordant else -abs(float(o.confidence))
         return total
+
+    def concordant_count(self) -> int:
+        return sum(1 for o in self.occurrences if o.concordant)
 
     def independent_count(self) -> int:
         """Independent = distinct sessions with a concordant observation."""
@@ -459,7 +463,8 @@ class HypothesisEngine:
         if h.status != "hypothesis":
             return
         cfg = self.config
-        if (h.independent_count() >= cfg.min_occurrences
+        if (h.concordant_count() >= cfg.min_occurrences
+                and h.independent_count() >= cfg.min_sessions
                 and h.cumulative_confidence() >= cfg.min_cumulative_confidence):
             self._promote(h)
 

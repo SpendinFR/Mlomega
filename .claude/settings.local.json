@@ -237,7 +237,10 @@
       "PowerShell(git status --short | Select-Object -First 8; git log --oneline -2; $ffdir = Get-ChildItem \"$env:LOCALAPPDATA\\\\Microsoft\\\\WinGet\\\\Packages\" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName; $env:Path = \"$ffdir;$env:Path\"; python -m pytest tests/v19/test_e37_nightly.py -q 2>&1 | Select-Object -Last 5)",
       "PowerShell($ffdir = Get-ChildItem \"$env:LOCALAPPDATA\\\\Microsoft\\\\WinGet\\\\Packages\" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName; $env:Path = \"$ffdir;$env:Path\"; python -m pytest tests/v19 -q 2>&1 | Select-Object -Last 3)",
       "PowerShell(git checkout -b feat/v19-e38-fine-intel origin/main 2>&1)",
-      "Bash(git commit -q -m 'feat\\(v19-e38\\): hypothesis_engine + attribute_memory + routine_associations + wiring *)"
+      "Bash(git commit -q -m 'feat\\(v19-e38\\): hypothesis_engine + attribute_memory + routine_associations + wiring *)",
+      "Bash(python -m pytest tests/v19/test_e38_fine_intel.py -q)",
+      "Bash(python -m pytest \"tests/v19/test_e38_fine_intel.py::test_addressed_name_promotes_across_sessions_with_announcement\" -q)",
+      "Bash(git commit -q -m 'feat\\(v19-e38\\): tests \\(11\\) + guide line [x] + ADR §E38 + backlog FAIT — 181 passed, 1 skipped *)"
     ]
   }
 }
