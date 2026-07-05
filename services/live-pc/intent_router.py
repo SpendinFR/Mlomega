@@ -102,6 +102,49 @@ def _build_rules() -> list[tuple[re.Pattern[str], str, dict[str, Any]]]:
 
 _RULES = _build_rules()
 
+
+# --------------------------------------------------------------------------- NL-first
+# High-confidence grammar shortcut (E34 §1a): a command that *begins* with an
+# exact control keyword is an unambiguous instrument order — routed instantly,
+# offline, with no LLM round-trip. Everything else is treated as natural language
+# and parsed by the live LLM first (§1b); the full lenient grammar is only a
+# safety net when the LLM is unavailable (§1c). The rule is intentionally strict:
+# the utterance must START with the keyword (after an optional politeness lead-in),
+# so "cache tout" is instant but "tu peux cacher les trucs vers midi ?" goes to the
+# LLM where the nuance lives.
+_LEADIN = r"(?:s'?il\s+te\s+pla[iî]t\s+|st[pe]\s+|please\s+|hey\s+|ok\s+|dis\s+|allez\s+)?"
+_HIGH_CONFIDENCE: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(_LEADIN + p, re.IGNORECASE), name)
+    for p, name in [
+        (r"menu\b", "menu"),
+        (r"open\s+(?:the\s+)?menu\b", "menu"),
+        (r"(?:cache|masque)\s+tout\b", "set_ui_mode"),
+        (r"tout\s+cacher\b", "set_ui_mode"),
+        (r"hide\s+(?:all|everything)\b", "set_ui_mode"),
+        (r"(?:affiche|montre)\s+tout\b", "set_ui_mode"),
+        (r"show\s+(?:all|everything)\b", "set_ui_mode"),
+        (r"mode\s+(?:free\s*guy|freeguy|libre)\b", "set_ui_mode"),
+        (r"(?:mode\s+)?minimal\b", "set_ui_mode"),
+        (r"mode\s+normal\b", "set_ui_mode"),
+        (r"zoom\b", "zoom"),
+        (r"agrandis?\b", "zoom"),
+        (r"pause\s+priv[ée]e?\b", "privacy_pause"),
+        (r"privacy\s+pause\b", "privacy_pause"),
+        (r"private\s+mode\b", "privacy_pause"),
+        (r"mode\s+priv[ée]\b", "privacy_pause"),
+        (r"mode\s+payant\b", "paid_mode"),
+        (r"paid\s+mode\b", "paid_mode"),
+        (r"mode\s+local\b", "local_mode"),
+        (r"local\s+mode\b", "local_mode"),
+        (r"mode\s+gratuit\b", "local_mode"),
+    ]
+]
+
+
+def _high_confidence_match(text: str) -> bool:
+    """True when the utterance *begins* with an exact control keyword (§1a)."""
+    return any(pat.match(text) for pat, _ in _HIGH_CONFIDENCE)
+
 # Deixis: pronouns that resolve on the last target/answer.
 _DEIXIS = re.compile(r"\b(?:et\s+)?(?:ça|ca|celui-?l[àa]|celle-?l[àa]|dessus|le|la|it|this|that)\b", re.IGNORECASE)
 _ZOOM_DEIXIS = re.compile(r"\bzoom\b|\bagrandis\b", re.IGNORECASE)
@@ -260,22 +303,35 @@ class IntentRouter:
                 self.metrics["multiturn_hits"] += 1
                 return self._dispatch(routed, raw)
 
-        # 3) Grammar.
+        # 3) High-confidence grammar shortcut (§1a): only when the utterance BEGINS
+        # with an exact control keyword ("menu", "cache tout", "zoom", "mode payant"
+        # …). These are unambiguous instrument orders — instant, offline, no LLM.
+        if _high_confidence_match(raw):
+            routed = self._match_grammar(raw)
+            if routed is not None:
+                self.metrics["grammar_hits"] += 1
+                return self._dispatch(routed, raw)
+
+        # 4) Natural language first (§1b): everything else goes to the live LLM,
+        # which parses free speech ("tu peux me montrer ce que j'ai fait vers 14h ?"
+        # → replay_at) into one strict-JSON intent. This is the primary path.
+        routed = self._llm_parse(raw)
+        if routed is not None:
+            self.metrics["llm_fallbacks"] += 1
+            return self._dispatch(routed, raw)
+
+        # 5) Lenient grammar NET (§1c): only reached when the LLM is unavailable
+        # (offline / not configured). The full regex grammar still resolves the
+        # common orders so the glasses stay useful without any model.
         routed = self._match_grammar(raw)
         if routed is not None:
             self.metrics["grammar_hits"] += 1
             return self._dispatch(routed, raw)
 
-        # 4) Multi-turn deixis (general).
+        # 6) Multi-turn deixis (general), as a final referent-based resolution.
         routed = self._match_deixis(raw)
         if routed is not None:
             self.metrics["multiturn_hits"] += 1
-            return self._dispatch(routed, raw)
-
-        # 5) LLM fallback.
-        routed = self._llm_parse(raw)
-        if routed is not None:
-            self.metrics["llm_fallbacks"] += 1
             return self._dispatch(routed, raw)
 
         return self._unknown(raw)
@@ -338,14 +394,27 @@ class IntentRouter:
         schema = {
             "intent": "one of: what_is|find|ocr|translate|zoom|set_ui_mode|privacy_pause|"
                       "open_app|paid_mode|local_mode|menu|replay|ask_memory|unknown",
-            "query": "string (target for find/open_app)",
+            "query": "string (target for find, or search text for open_app youtube)",
             "ui_mode": "hide_all|minimal|normal|freeguy",
             "app": "maps|youtube|package",
+            "destination": "string (place for open_app maps)",
+            "package": "string (android package for open_app)",
+            "language": "string (target language for translate)",
+            "provider": "openai|gemini (for paid_mode)",
+            "time": "string, an hour like '14h' or '14h30' (for replay)",
+            "question": "string (the memory question for ask_memory)",
         }
         system = (
-            "Tu es le routeur d'intentions de lunettes AR. Classe l'ordre vocal en UN intent "
-            "de la liste et extrais ses paramètres. Réponds en JSON strict. Si aucun intent ne "
-            "correspond, intent=unknown."
+            "Tu es le routeur d'intentions de lunettes AR. L'utilisateur parle NATURELLEMENT, "
+            "pas en commandes ; comprends l'intention réelle derrière la phrase et classe-la en "
+            "UN intent de la liste, puis extrais ses paramètres. Réponds en JSON strict. "
+            "Exemples : « tu peux me montrer ce que j'ai fait vers 14h ? » -> "
+            "{\"intent\":\"replay\",\"time\":\"14h\"} ; « c'est quoi ce truc devant moi ? » -> "
+            "{\"intent\":\"what_is\"} ; « emmène-moi à la gare » -> "
+            "{\"intent\":\"open_app\",\"app\":\"maps\",\"destination\":\"la gare\"} ; "
+            "« qu'est-ce que j'avais promis à Sarah déjà ? » -> "
+            "{\"intent\":\"ask_memory\",\"question\":\"qu'est-ce que j'avais promis à Sarah\"}. "
+            "Si aucun intent ne correspond, intent=unknown."
         )
         try:
             data = self.llm_router.complete_json(system, text, schema_hint=schema, timeout=8)

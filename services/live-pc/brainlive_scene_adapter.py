@@ -185,6 +185,9 @@ class BrainLiveSceneAdapter:
         config: SceneAdapterConfig | None = None,
         db_path: Any = None,
         known_people: Mapping[str, Mapping[str, Any]] | None = None,
+        proactive: Any = None,
+        predictive_retrieval: Any = None,
+        on_entity_hot_update: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         self.person_id = person_id
         self.live_session_id = live_session_id
@@ -195,7 +198,21 @@ class BrainLiveSceneAdapter:
         self._active_task: dict[str, Any] | None = None
         self._transcript_hint: str | None = None
         self._delivered_sources: set[str] = set()
-        self.metrics = {"hot_context_builds": 0, "deliveries_enqueued": 0}
+        # E34: nightly engines brought into the live loop + dense retrieval +
+        # device prefetch. All optional — a bare adapter keeps its E28 behaviour.
+        self.proactive = proactive
+        self.predictive_retrieval = predictive_retrieval
+        self._on_entity_hot_update = on_entity_hot_update
+        self._prefetched_people: set[str] = set()
+        self.metrics = {
+            "hot_context_builds": 0,
+            "deliveries_enqueued": 0,
+            "proactive_predictions": 0,
+            "proactive_interventions": 0,
+            "clarifications_asked": 0,
+            "similar_experiences": 0,
+            "entity_hot_updates": 0,
+        }
         self._last_build_ts = 0.0
 
     # ----------------------------------------------------------------- context
@@ -227,8 +244,70 @@ class BrainLiveSceneAdapter:
             reflex_events=reflex_events,
             config=self.config,
         )
+        # E34 §2: fold the nightly engines' open items into the hot context so the
+        # policy LLM can reference them. Compact, and dropped if it would overflow.
+        if self.proactive is not None:
+            try:
+                snap = self.proactive.snapshot()
+                if any(snap.get(k) for k in ("predictions", "interventions", "clarifications")):
+                    self._fold_section(ctx, "proactive", snap)
+            except Exception:
+                pass
+        # E34 §3: dense predictive retrieval — "experiences similaires" from past
+        # cases matching the current subject/entities. Clean degrade if Qdrant off.
+        similar = self._retrieve_similar(ctx)
+        if similar:
+            self._fold_section(ctx, "similar_experiences", similar)
+            self.metrics["similar_experiences"] += len(similar)
         self.metrics["hot_context_builds"] += 1
         return ctx
+
+    def _fold_section(self, ctx: dict[str, Any], key: str, value: Any) -> None:
+        """Add a section to the hot context only if it stays within the budget."""
+        import json
+
+        trial = {**ctx, key: value}
+        if len(json.dumps(trial, default=str)) <= self.config.hot_budget_chars:
+            ctx[key] = value
+        else:
+            ctx.setdefault("omissions", []).append(key)
+
+    def _retrieve_similar(self, ctx: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """Dense predictive retrieval on the current context (E34 §3).
+
+        Wraps ``get_predictive_backend().retrieve(...)``. The retrieval frontier
+        (Qdrant + reranker) may be down; any failure yields an empty list and a
+        one-line WARN, never a crash (honest degrade)."""
+        if self.predictive_retrieval is None:
+            return []
+        query_text = self._subject_text(ctx)
+        if not query_text:
+            return []
+        try:
+            cands = self.predictive_retrieval.retrieve_for_live(
+                person_id=self.person_id,
+                query_text=query_text,
+                session_id=self.live_session_id,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            import sys as _sys
+
+            print(f"[scene_adapter] predictive retrieval unavailable: {str(exc)[:120]}", file=_sys.stderr)
+            return []
+        out: list[dict[str, Any]] = []
+        for c in (cands or [])[:3]:
+            if isinstance(c, Mapping):
+                out.append({"text": str(c.get("text") or "")[:160], "score": c.get("score")})
+        return out
+
+    @staticmethod
+    def _subject_text(ctx: Mapping[str, Any]) -> str:
+        parts: list[str] = []
+        act = ctx.get("activity")
+        if isinstance(act, Mapping) and act.get("transcript_hint"):
+            parts.append(str(act.get("transcript_hint")))
+        parts.extend(str(e.get("label") or "") for e in (ctx.get("visible_entities") or [])[:5])
+        return " ".join(p for p in parts if p).strip()
 
     def _identify_people(self, snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
@@ -256,7 +335,8 @@ class BrainLiveSceneAdapter:
             world_state=None, observations=None, db_path=self.db_path,
         )
 
-    def _enqueue(self, *, source_key: str, message: str, evidence_refs: Sequence[str], priority: float) -> dict[str, Any]:
+    def _enqueue(self, *, source_key: str, message: str, evidence_refs: Sequence[str], priority: float,
+                 kind: str | None = None, item_id: str | None = None) -> dict[str, Any]:
         from mlomega_audio_elite import v18_delivery  # type: ignore
 
         candidate = {
@@ -267,6 +347,12 @@ class BrainLiveSceneAdapter:
             "candidate_id": source_key,
             "priority": priority,
         }
+        # A clarification question carries its inbox item_id so the device can post
+        # the user's spoken answer back through the existing conversation path.
+        if kind:
+            candidate["kind"] = kind
+        if item_id:
+            candidate["clarification_item_id"] = item_id
         result = v18_delivery.enqueue_delivery(
             live_session_id=self.live_session_id,
             source_key=source_key,
@@ -275,6 +361,58 @@ class BrainLiveSceneAdapter:
         if result.get("status") == "queued":
             self.metrics["deliveries_enqueued"] += 1
         return result
+
+    # ------------------------------------------------------------ prefetch (§5)
+    def prefetch_relation_pack(self, *, entity_id: str | None, person_id: str | None, name: str | None) -> dict[str, Any] | None:
+        """Push a compact relation pack for a just-identified person to the device
+        (E34 §5). The device's SceneCache.entities_hot integrates it so the
+        ContextCard renders from the local cache with zero round-trip.
+
+        The relation pack is what ``build_active_context`` already assembles as
+        ``active_relationship_packs`` (last subjects / promises from the core
+        relationship tables) — we only read it and compact it. Emitted once per
+        (entity, person) per session; deduped by ``_prefetched_people``."""
+        if self._on_entity_hot_update is None or not person_id:
+            return None
+        dedup = f"{entity_id or ''}:{person_id}"
+        if dedup in self._prefetched_people:
+            return None
+        self._prefetched_people.add(dedup)
+        pack = self._relation_pack(person_id)
+        message = {
+            "type": "entity_hot_update",
+            "entity_id": entity_id,
+            "person_id": person_id,
+            "name": name,
+            "relation_pack": pack,
+            "as_of": _iso_now(),
+        }
+        try:
+            self._on_entity_hot_update(message)
+            self.metrics["entity_hot_updates"] += 1
+        except Exception:
+            return None
+        return message
+
+    def _relation_pack(self, person_id: str) -> list[dict[str, Any]]:
+        """Compact relation pack (last topics / promises) for a person from the
+        core relationship tables via ``build_active_context``. Best-effort."""
+        try:
+            from mlomega_audio_elite import brainlive_v15  # type: ignore
+
+            ac = brainlive_v15.build_active_context(self.live_session_id, active_people=[person_id], limit=5)
+            b2 = ac.get("brain2_context") if isinstance(ac, Mapping) else None
+            packs = (b2 or {}).get("active_relationship_packs") if isinstance(b2, Mapping) else None
+            out: list[dict[str, Any]] = []
+            for p in (packs or [])[:4]:
+                if not isinstance(p, Mapping):
+                    continue
+                out.append({k: p.get(k) for k in ("known_person_id", "person_hint", "summary",
+                                                   "last_topics", "open_promises", "relationship_type")
+                            if p.get(k) is not None})
+            return out
+        except Exception:
+            return []
 
     def evaluate_situations(self, ctx: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
         """Detect §12.4 situations in the current scene and enqueue deliveries.
@@ -307,5 +445,68 @@ class BrainLiveSceneAdapter:
             key = f"scene:{self.live_session_id}:task:{self._active_task.get('task_key') or 'active'}"
             step = self._active_task.get("next_step") or self._active_task.get("step") or "prochaine étape"
             results.append(self._enqueue(source_key=key, message=str(step), evidence_refs=evidence, priority=0.55))
+
+        # E34 proactive situations (only when the nightly engines are wired) -----
+        if self.proactive is not None:
+            results.extend(self._evaluate_proactive(ctx, evidence))
+
+        return results
+
+    def _evaluate_proactive(self, ctx: Mapping[str, Any], evidence: Sequence[str]) -> list[dict[str, Any]]:
+        """§2 proactive situations: a day-prediction matches the scene; a nightly
+        intervention is relevant; a clarification is due in a calm context."""
+        results: list[dict[str, Any]] = []
+        conversation_active = bool((ctx.get("activity") or {}).get("transcript_hint")) if isinstance(ctx.get("activity"), Mapping) else False
+
+        # (a) A prediction of the day matches the scene/conversation (same specs as
+        # the outcome watcher) → "tu voulais racheter X".
+        try:
+            for p in self.proactive.match_predictions(ctx):
+                pid = p.get("prediction_id") or "pred"
+                key = f"scene:{self.live_session_id}:prediction:{pid}"
+                msg = str(p.get("statement") or "Rappel du jour")
+                ev = list(p.get("evidence_refs") or evidence)
+                results.append(self._enqueue(source_key=key, message=msg, evidence_refs=ev, priority=0.65))
+                self.metrics["proactive_predictions"] += 1
+        except Exception:
+            pass
+
+        # (b) A nightly intervention relevant to the current context → delivery.
+        try:
+            for i in self.proactive.relevant_interventions(ctx):
+                qid = i.get("queue_id") or "interv"
+                key = f"scene:{self.live_session_id}:intervention:{qid}"
+                msg = str(i.get("message") or i.get("title") or "")
+                if not msg:
+                    continue
+                results.append(self._enqueue(source_key=key, message=msg, evidence_refs=list(evidence), priority=0.6))
+                self.metrics["proactive_interventions"] += 1
+        except Exception:
+            pass
+
+        # (c) A clarification question asked at the right (calm) moment → a question
+        # ContextCard. The user's spoken answer travels back on the existing
+        # conversation path (ConversationBridge → clarification inbox nightly).
+        try:
+            clar = self.proactive.due_clarification(ctx, conversation_active=conversation_active)
+            if clar is not None:
+                item_id = clar.get("item_id") or "clar"
+                question = str(clar.get("question_text") or clar.get("question") or "")
+                if question:
+                    key = f"scene:{self.live_session_id}:clarification:{item_id}"
+                    res = self._enqueue(
+                        source_key=key,
+                        message=question,
+                        evidence_refs=list(evidence),
+                        priority=0.5,
+                        kind="clarification_question",
+                        item_id=str(item_id),
+                    )
+                    results.append(res)
+                    if res.get("status") == "queued":
+                        self.metrics["clarifications_asked"] += 1
+                        self.proactive.mark_clarification_delivered(str(item_id))
+        except Exception:
+            pass
 
         return results
