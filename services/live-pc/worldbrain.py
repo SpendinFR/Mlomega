@@ -276,6 +276,12 @@ class WorldBrain:
             session_id=live_session_id, started_at=_iso(_utc_now())
         )
         self.entities: dict[str, WorldEntity] = {}          # entity_id → entity
+        # E35 §3: labels/zones the user has verbally corrected away ("ce n'est pas
+        # mon téléphone", "on n'est pas au bureau"). A suspended label is filtered
+        # out of every subsequent snapshot/SceneDelta; a suspended zone is dropped
+        # from ``active_zone``. Correction is durable within the session.
+        self._suspended_labels: set[str] = set()            # normalised labels
+        self._suspended_zones: set[str] = set()             # zone ids / place hints
         self._track_to_entity: dict[str, str] = {}          # track_id → entity_id
         self._track_counts: dict[str, int] = {}             # track_id → confirmed hits
         self._track_last: dict[str, dict[str, Any]] = {}    # track_id → last raw entry
@@ -372,6 +378,10 @@ class WorldBrain:
                 continue
             seen_track_ids.add(track_id)
             label = str(ent.get("label") or ent.get("kind") or "object")
+            # E35 §3: a label the user corrected away never re-promotes or updates
+            # an entity — the wrong label stays out of the world picture.
+            if self.is_label_suspended(label):
+                continue
             kind = str(ent.get("kind") or "object")
             conf = float(ent.get("confidence") or 0.0)
             bbox = tuple(float(v) for v in (ent.get("bbox") or (0, 0, 0, 0)))  # type: ignore[assignment]
@@ -534,11 +544,57 @@ class WorldBrain:
             self._svc_db.commit()
         return changes
 
+    # ---------------------------------------------------------------- correction
+    @staticmethod
+    def _norm_label(label: str | None) -> str:
+        return (label or "").strip().lower()
+
+    def suspend_label(self, label: str) -> int:
+        """Suspend an object/place *label* the user corrected away (E35 §3).
+
+        Every entity carrying this label is dropped now and filtered out of every
+        subsequent snapshot/SceneDelta. Returns the number of live entities hidden.
+        The label stays suspended for the session so a re-detection under the same
+        (wrong) label does not resurface it."""
+        norm = self._norm_label(label)
+        if not norm:
+            return 0
+        self._suspended_labels.add(norm)
+        hidden = 0
+        for eid, e in list(self.entities.items()):
+            if self._norm_label(e.label) == norm:
+                self.entities.pop(eid, None)
+                # forget the track binding so a new sighting must re-promote
+                for tid, mapped in list(self._track_to_entity.items()):
+                    if mapped == eid:
+                        self._track_to_entity.pop(tid, None)
+                        self._track_counts.pop(tid, None)
+                hidden += 1
+        return hidden
+
+    def suspend_zone(self, zone: str) -> None:
+        """Suspend a place/zone label the user corrected away ("on n'est pas au
+        bureau"). Clears it from the current session place/active_zone and keeps it
+        out of future snapshots until re-established."""
+        norm = self._norm_label(zone)
+        if not norm:
+            return
+        self._suspended_zones.add(norm)
+        if self._norm_label(self.session.place_hint) == norm:
+            self.session.place_hint = None
+        if self._norm_label(self.session.active_zone) == norm:
+            self.session.active_zone = None
+
+    def is_label_suspended(self, label: str | None) -> bool:
+        return self._norm_label(label) in self._suspended_labels
+
     # ---------------------------------------------------------------- last-seen
     def last_seen(self) -> list[dict[str, Any]]:
-        """Every known entity with its age (visible or stale)."""
+        """Every known entity with its age (visible or stale), minus any label the
+        user has verbally suspended (E35 §3)."""
         now = _utc_now()
-        return [e.to_dict(now) for e in self.entities.values()]
+        return [e.to_dict(now) for e in self.entities.values()
+                if not self.is_label_suspended(e.label)]
 
     def last_seen_entity(self, entity_id: str) -> WorldEntity | None:
         return self.entities.get(entity_id)

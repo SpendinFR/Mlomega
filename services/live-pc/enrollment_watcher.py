@@ -58,8 +58,66 @@ _CORRECTION_PATTERNS = [
     re.compile(r"\bforget\b\s+" + _NAME, re.IGNORECASE),
 ]
 
-# Words that are never a person name even if they slot into the grammar.
-_STOP_NAMES = {"pas", "de", "ce", "que", "la", "le", "un", "une", "this", "that", "the", "not", "a", "an"}
+# Words that are never a person name even if they slot into the grammar. Includes
+# determiners/possessives so "ce n'est pas mon téléphone" is NOT read as the
+# person "Mon" — it falls through to the E35 object/place scene correction.
+_STOP_NAMES = {"pas", "de", "ce", "que", "la", "le", "un", "une", "this", "that", "the",
+               "not", "a", "an", "mon", "ma", "mes", "ton", "ta", "tes", "son", "sa",
+               "ses", "les", "des", "au", "aux", "my", "your", "his", "her"}
+
+# E35 §3 — object/place correction. The target is a *label/place phrase*, not a
+# capitalised person name: "ce n'est pas mon téléphone" (object), "on n'est pas au
+# bureau" / "ce n'est pas la cuisine" (place). These are matched AFTER the person
+# correction so "ce n'est pas Paul" still routes to identity (a capitalised single
+# name), while a common-noun phrase routes to scene correction.
+_PHRASE = r"([\wÀ-ÖØ-öø-ÿ' \-]{2,50})"
+_PLACE_CORRECTION_PATTERNS = [
+    re.compile(r"\bon\s+n'?est\s+pas\b\s+(?:à\s+|au\s+|dans\s+(?:la\s+|le\s+|l')?|en\s+)?" + _PHRASE, re.IGNORECASE),
+    re.compile(r"\bce\s+n'?est\s+pas\b\s+(?:mon|ma|le|la|l'|un|une)\s+(?:bureau|maison|cuisine|salon|chambre|garage|jardin|salle[\w \-]*)", re.IGNORECASE),
+    re.compile(r"\bwe'?re\s+not\s+(?:at|in)\b\s+(?:the\s+)?" + _PHRASE, re.IGNORECASE),
+]
+_OBJECT_CORRECTION_PATTERNS = [
+    re.compile(r"\bce\s+n'?est\s+pas\b\s+(?:mon|ma|mes|un|une|le|la|l')\s+" + _PHRASE, re.IGNORECASE),
+    re.compile(r"\bc'?est\s+pas\b\s+(?:mon|ma|mes|un|une|le|la|l')\s+" + _PHRASE, re.IGNORECASE),
+    re.compile(r"\bthat'?s\s+not\b\s+(?:my|a|an|the)\s+" + _PHRASE, re.IGNORECASE),
+]
+# Place nouns that, when they trail an object pattern, mean it's really a place.
+_PLACE_NOUNS = {"bureau", "maison", "cuisine", "salon", "chambre", "garage", "jardin",
+                "office", "home", "kitchen", "bedroom", "garage", "garden", "salle"}
+
+
+def _clean_phrase(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    t = re.sub(r"\s+", " ", raw.strip().strip(".,!?;:").strip())
+    return t or None
+
+
+def parse_scene_correction(text: str) -> dict[str, Any] | None:
+    """Return {intent: correct_place|correct_object, target} for a scene
+    correction ("ce n'est pas mon téléphone" / "on n'est pas au bureau"), else
+    None. Person corrections (a bare capitalised name) are NOT matched here — they
+    stay with :func:`parse_identity_command`."""
+    t = (text or "").strip()
+    if not t:
+        return None
+    for pat in _PLACE_CORRECTION_PATTERNS:
+        m = pat.search(t)
+        if m:
+            target = _clean_phrase(m.group(m.lastindex) if m.lastindex else None) or _clean_phrase(m.group(0))
+            if target:
+                return {"intent": "correct_place", "target": target}
+    for pat in _OBJECT_CORRECTION_PATTERNS:
+        m = pat.search(t)
+        if m:
+            target = _clean_phrase(m.group(1))
+            if not target:
+                continue
+            first = target.split()[0].lower()
+            if first in _PLACE_NOUNS:
+                return {"intent": "correct_place", "target": target}
+            return {"intent": "correct_object", "target": target}
+    return None
 
 
 def _clean_name(raw: str | None) -> str | None:
@@ -103,19 +161,24 @@ class EnrollmentWatcher:
         face_identity: Any = None,
         voice_identity: Any = None,
         fusion: Any = None,
+        worldbrain: Any = None,
         person_id: str = "me",
         emit_ui_intent: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         self.face = face_identity
         self.voice = voice_identity
         self.fusion = fusion
+        # E35 §3: WorldBrain handle so object/place corrections suspend the label /
+        # zone (kept out of subsequent SceneDeltas) + trace revise_memory.
+        self.worldbrain = worldbrain
         self.person_id = person_id
         self._emit = emit_ui_intent
         self._active_track: str | None = None
         self._active_entity: str | None = None
         self._active_crop: Any = None
         self._active_segment: Path | None = None
-        self.metrics = {"enrollments": 0, "corrections": 0, "commands_seen": 0}
+        self.metrics = {"enrollments": 0, "corrections": 0, "commands_seen": 0,
+                        "object_corrections": 0, "place_corrections": 0}
 
     # ------------------------------------------------------------- context feed
     def set_active_track(self, track_id: str | None, entity_id: str | None = None, crop_bgr: Any = None) -> None:
@@ -139,12 +202,19 @@ class EnrollmentWatcher:
     # ------------------------------------------------------------- main entry
     def on_transcript(self, text: str) -> dict[str, Any] | None:
         cmd = parse_identity_command(text)
-        if cmd is None:
-            return None
-        self.metrics["commands_seen"] += 1
-        if cmd["intent"] == "enroll":
-            return self._do_enroll(cmd["name"])
-        return self._do_correct(cmd["name"])
+        if cmd is not None:
+            self.metrics["commands_seen"] += 1
+            if cmd["intent"] == "enroll":
+                return self._do_enroll(cmd["name"])
+            return self._do_correct(cmd["name"])
+        # E35 §3: object / place correction (no person name matched).
+        scene = parse_scene_correction(text)
+        if scene is not None:
+            self.metrics["commands_seen"] += 1
+            if scene["intent"] == "correct_place":
+                return self._do_correct_place(scene["target"])
+            return self._do_correct_object(scene["target"])
+        return None
 
     # ------------------------------------------------------------- enroll
     def _do_enroll(self, name: str) -> dict[str, Any]:
@@ -205,7 +275,51 @@ class EnrollmentWatcher:
         result["ui_intent"] = intent
         return result
 
-    def _record_memory_correction(self, name: str) -> dict[str, Any] | None:
+    # -------------------------------------------------- object / place correction
+    def _do_correct_object(self, target: str) -> dict[str, Any]:
+        """« ce n'est pas mon téléphone » → suspend that object label in WorldBrain
+        (dropped from subsequent SceneDeltas) + durable revise_memory trace."""
+        result: dict[str, Any] = {"intent": "correct_object", "target": target,
+                                  "suspended": False, "hidden": 0, "memory_revision": None}
+        if self.worldbrain is not None:
+            try:
+                hidden = self.worldbrain.suspend_label(target)
+                result["suspended"] = True
+                result["hidden"] = int(hidden or 0)
+            except Exception:
+                pass
+        rev = self._record_memory_correction(target, reason=f"correction objet: ce n'est pas {target}")
+        if rev:
+            result["memory_revision"] = rev
+        self.metrics["object_corrections"] += 1
+        intent = {"type": "ui_intent", "ui_intent_id": str(uuid.uuid4()), "kind": "toast",
+                  "content": {"text": f"Corrigé : ce n'est pas {target}", "level": "confirm"}}
+        self._ui(intent)
+        result["ui_intent"] = intent
+        return result
+
+    def _do_correct_place(self, target: str) -> dict[str, Any]:
+        """« on n'est pas au bureau » → suspend that zone/place in WorldBrain +
+        durable revise_memory trace."""
+        result: dict[str, Any] = {"intent": "correct_place", "target": target,
+                                  "suspended": False, "memory_revision": None}
+        if self.worldbrain is not None:
+            try:
+                self.worldbrain.suspend_zone(target)
+                result["suspended"] = True
+            except Exception:
+                pass
+        rev = self._record_memory_correction(target, reason=f"correction lieu: on n'est pas {target}")
+        if rev:
+            result["memory_revision"] = rev
+        self.metrics["place_corrections"] += 1
+        intent = {"type": "ui_intent", "ui_intent_id": str(uuid.uuid4()), "kind": "toast",
+                  "content": {"text": f"Corrigé : on n'est pas {target}", "level": "confirm"}}
+        self._ui(intent)
+        result["ui_intent"] = intent
+        return result
+
+    def _record_memory_correction(self, name: str, *, reason: str | None = None) -> dict[str, Any] | None:
         """Best-effort durable trace: invalidate an atomic identity memory of ``name``.
 
         Uses the core ``memory_correction.revise_memory`` (never reimplemented).
@@ -229,7 +343,7 @@ class EnrollmentWatcher:
             return revise_memory(
                 target_table="atomic_memories", target_id=memory_id,
                 revision_type="invalidate",
-                reason=f"voice correction: ce n'est pas {name}",
+                reason=reason or f"voice correction: ce n'est pas {name}",
                 person_id=self.person_id,
             )
         except Exception:
