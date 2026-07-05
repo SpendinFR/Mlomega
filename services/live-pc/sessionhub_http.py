@@ -260,7 +260,14 @@ def main(argv: list[str] | None = None) -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="MLOmega V19 SessionHub HTTP server")
-    parser.add_argument("--host", default="0.0.0.0")
+    # E36 §1: bind on ALL interfaces by default so a VPN-tunnel (Tailscale 100.x)
+    # peer can reach the SessionHub the same way a LAN peer does; the ephemeral
+    # session token is the access barrier (already in place). Override with
+    # ``--host`` or the profile's ``bind_host`` for a stricter bind.
+    parser.add_argument(
+        "--host", default=None,
+        help="interface to bind (default: profile bind_host, else 0.0.0.0 — all interfaces)",
+    )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument(
         "--no-signaling",
@@ -271,8 +278,24 @@ def main(argv: list[str] | None = None) -> None:
 
     import uvicorn
 
+    host = args.host or _bind_host_from_profile() or "0.0.0.0"
     app = create_app(enable_signaling=not args.no_signaling)
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn.run(app, host=host, port=args.port)
+
+
+def _bind_host_from_profile() -> str | None:
+    """Read ``bind_host`` from configs/user_profile.yaml (E36 §1). Absent → None."""
+    try:
+        import yaml
+
+        p = _ROOT / "configs" / "user_profile.yaml"
+        if not p.exists():
+            return None
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        host = data.get("bind_host")
+        return str(host) if host else None
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":

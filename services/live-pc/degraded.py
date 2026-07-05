@@ -48,6 +48,94 @@ class DegradedThresholds:
     max_network_latency_ms: float = 250.0  # RTT above this -> network_degraded
 
 
+# --------------------------------------------------------------------------- WAN
+# E36 §1: outside-the-home the link is a VPN tunnel over 4G/5G, not the LAN. The
+# latency floor is higher (typ. 40-120 ms one-way on 4G) so a fixed LAN threshold
+# would flap network_degraded constantly. We keep two *network* profiles and lower
+# the **video resolution target** on WAN (never the detector cadence on the PC —
+# that runs locally; and never the device reflex paths — they don't need the PC).
+LINK_LAN = "lan"
+LINK_WAN = "wan"
+
+
+@dataclass
+class NetworkProfile:
+    """Per-link network thresholds + the target video the client should send.
+
+    ``target_video_height`` is a *hint the client honours* (720p on LAN, 540p on
+    WAN by default) so the tunnel carries less video without touching any PC-side
+    detector/OCR cadence. ``latency_soft_ms`` is where the StatusBar shows a WAN
+    hint; ``latency_hard_ms`` (== DegradedThresholds.max_network_latency_ms) is
+    where the network_degraded action fires."""
+
+    link: str = LINK_LAN
+    target_video_height: int = 720
+    max_network_latency_ms: float = 250.0
+    latency_soft_ms: float = 150.0
+    max_frame_drops: int = 30
+
+
+def default_network_profiles() -> dict[str, NetworkProfile]:
+    return {
+        LINK_LAN: NetworkProfile(link=LINK_LAN, target_video_height=720,
+                                 max_network_latency_ms=250.0, latency_soft_ms=120.0,
+                                 max_frame_drops=30),
+        # WAN tolerates 4G/5G RTT (a Tailscale hop over mobile) and asks the client
+        # for 540p so the tunnel is not saturated. PC detector cadence unchanged.
+        LINK_WAN: NetworkProfile(link=LINK_WAN, target_video_height=540,
+                                 max_network_latency_ms=400.0, latency_soft_ms=180.0,
+                                 max_frame_drops=45),
+    }
+
+
+def network_profiles_from_config(cfg: dict[str, object] | None) -> dict[str, NetworkProfile]:
+    """Merge a ``degraded.network`` config block over the defaults (all optional).
+
+    Config shape (profile / rtx3070.yaml, all keys optional)::
+
+        degraded:
+          network:
+            wan: {target_video_height: 480, max_network_latency_ms: 500}
+            lan: {target_video_height: 720}
+    """
+    profiles = default_network_profiles()
+    net = (cfg or {}).get("network") if isinstance(cfg, dict) else None
+    if not isinstance(net, dict):
+        return profiles
+    for link in (LINK_LAN, LINK_WAN):
+        block = net.get(link)
+        if not isinstance(block, dict):
+            continue
+        p = profiles[link]
+        if block.get("target_video_height") is not None:
+            p.target_video_height = int(block["target_video_height"])
+        if block.get("max_network_latency_ms") is not None:
+            p.max_network_latency_ms = float(block["max_network_latency_ms"])
+        if block.get("latency_soft_ms") is not None:
+            p.latency_soft_ms = float(block["latency_soft_ms"])
+        if block.get("max_frame_drops") is not None:
+            p.max_frame_drops = int(block["max_frame_drops"])
+    return profiles
+
+
+def thresholds_for_link(
+    profiles: dict[str, NetworkProfile], link: str, base: "DegradedThresholds | None" = None
+) -> "DegradedThresholds":
+    """Build a :class:`DegradedThresholds` whose network limits follow ``link``.
+
+    GPU/heartbeat limits stay as the base (local, link-independent); only the
+    network latency / drop ceilings track the active link's profile."""
+    base = base or DegradedThresholds()
+    p = profiles.get(link) or profiles[LINK_LAN]
+    return DegradedThresholds(
+        heartbeat_stale_s=base.heartbeat_stale_s,
+        vram_floor_mb=base.vram_floor_mb,
+        vram_warn_mb=base.vram_warn_mb,
+        max_frame_drops=p.max_frame_drops,
+        max_network_latency_ms=p.max_network_latency_ms,
+    )
+
+
 @dataclass
 class DegradedSignals:
     now_ts: float                          # current monotonic/epoch seconds

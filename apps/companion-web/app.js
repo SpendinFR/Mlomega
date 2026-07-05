@@ -1,7 +1,41 @@
 const cards = document.getElementById('cards');
 const statusEl = document.getElementById('status');
-const url = new URLSearchParams(location.search).get('ws') || `ws://${location.hostname}:8706/ws`;
+// E36 §1: outside-access endpoint failover. `?endpoints=host[:hubPort],...`
+// (LAN first, then a VPN tunnel like Tailscale 100.x) is probed in order via the
+// SessionHub `/health`; the first reachable host builds the viewer WS URL. Falls
+// back to the current-host WS (the classic served-from-PC case) when absent or all
+// down. `?ws=` still overrides everything.
+const _params = new URLSearchParams(location.search);
+const _wsPort = _params.get('wsPort') || '8706';
+const _hubPort = _params.get('hubPort') || '8710';
+let url = _params.get('ws') || `ws://${location.hostname}:${_wsPort}/ws`;
 let ws;
+
+async function resolveEndpoint() {
+  const raw = _params.get('endpoints');
+  if (_params.get('ws') || !raw) return null;
+  const hosts = raw.split(',').map(s => s.trim()).filter(Boolean);
+  for (const item of hosts) {
+    const [host, hubPort] = item.split(':');
+    const healthUrl = `http://${host}:${hubPort || _hubPort}/health`;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 2000);
+      const resp = await fetch(healthUrl, {signal: ctrl.signal});
+      clearTimeout(t);
+      if (resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        if (body.status === 'ok') {
+          url = `ws://${host}:${_wsPort}/ws`;
+          if (statusEl) statusEl.textContent = `endpoint: ${host}`;
+          return host;
+        }
+      }
+    } catch (e) { /* try the next endpoint */ }
+  }
+  if (statusEl) statusEl.textContent = 'PC unreachable — reflex-only on the device';
+  return null;
+}
 function receipt(intent, event) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   ws.send(JSON.stringify({ui_intent_id:intent.ui_intent_id, delivery_id:intent.delivery_id, event, observed_at:new Date().toISOString(), local_track_state:{}, source:'companion-web'}));
@@ -48,4 +82,6 @@ function render(intent) {
   el.appendChild(btn); cards.prepend(el); receipt(intent, 'displayed');
 }
 function connect(){ ws = new WebSocket(url); ws.onopen=()=>statusEl.textContent='connected'; ws.onclose=()=>{statusEl.textContent='disconnected'; setTimeout(connect,1000)}; ws.onmessage=e=>render(JSON.parse(e.data)); }
-connect();
+// E36 §1: resolve the reachable endpoint (if an `?endpoints=` list is given) before
+// the first connect; a failed resolve leaves the current-host WS as the fallback.
+resolveEndpoint().catch(() => {}).finally(connect);
