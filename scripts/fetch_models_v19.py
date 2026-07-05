@@ -121,12 +121,79 @@ def install_argos(pairs: list[tuple[str, str]] | None = None) -> int:
     return errors
 
 
+def _fetchable_archives(models: dict) -> list[tuple[str, dict]]:
+    """Entries distributed as an archive (E35 TTS voices): archive + extract_to."""
+    out = []
+    for name, spec in models.items():
+        if isinstance(spec, dict) and spec.get("archive") and spec.get("extract_to"):
+            out.append((name, spec))
+    return out
+
+
+def fetch_archives(*, check_only: bool = False) -> int:
+    """Fetch + verify + extract archive-distributed models (sherpa TTS voices).
+
+    The archive is sha256-verified against ``archive_sha256`` (recorded on the
+    first successful fetch when the manifest pins ``PENDING_FETCH``), then
+    extracted so the entry's ``path`` (the .onnx inside) exists. Idempotent: a
+    voice whose ``path`` already exists is skipped."""
+    import bz2
+    import tarfile
+
+    models = _load_manifest()
+    errors = 0
+    for name, spec in _fetchable_archives(models):
+        path = ROOT / spec.get("path", "")
+        if path.exists():
+            print(f"[ok]   {name}: {path.name} already extracted")
+            continue
+        if check_only:
+            print(f"[miss] {name}: {path} absent ({spec.get('license')})")
+            errors += 1
+            continue
+        url = spec["archive"]
+        expected = str(spec.get("archive_sha256") or "")
+        extract_to = ROOT / str(spec["extract_to"])
+        extract_to.mkdir(parents=True, exist_ok=True)
+        archive_path = extract_to / Path(url).name
+        print(f"[get]  {name}: {url} -> {archive_path} ({spec.get('license')})")
+        try:
+            urllib.request.urlretrieve(url, archive_path)  # noqa: S310 - manifest-pinned URL
+        except Exception as exc:  # pragma: no cover - network failure path
+            print(f"[fail] {name}: download error: {exc}")
+            errors += 1
+            continue
+        actual = _sha256(archive_path)
+        if expected and expected != "PENDING_FETCH" and actual != expected:
+            print(f"[fail] {name}: archive sha256 mismatch (got {actual})")
+            errors += 1
+            continue
+        if expected == "PENDING_FETCH":
+            print(f"[pin]  {name}: record archive_sha256: {actual}")
+        try:
+            with tarfile.open(fileobj=bz2.BZ2File(archive_path), mode="r:") as tar:
+                tar.extractall(extract_to)  # noqa: S202 - manifest-pinned archive
+        except Exception as exc:  # pragma: no cover
+            print(f"[fail] {name}: extract error: {exc}")
+            errors += 1
+            continue
+        if path.exists():
+            print(f"[ok]   {name}: extracted + voice present ({spec.get('license')})")
+        else:
+            print(f"[warn] {name}: extracted but {path} not found (check path in manifest)")
+            errors += 1
+    return errors
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Fetch + verify V19 model weights.")
     ap.add_argument("--check", action="store_true", help="verify only, no download")
     ap.add_argument("--argos", action="store_true", help="also install Argos Translate packs")
+    ap.add_argument("--tts", action="store_true", help="also fetch sherpa-onnx TTS voices (E35)")
     args = ap.parse_args()
     errors = fetch_all(check_only=args.check)
+    if args.tts or not args.check:
+        errors += fetch_archives(check_only=args.check)
     if args.argos and not args.check:
         errors += install_argos()
     sys.exit(1 if errors else 0)

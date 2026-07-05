@@ -92,6 +92,10 @@ def _build_rules() -> list[tuple[re.Pattern[str], str, dict[str, Any]]]:
     # --- replay ---
     add(r"\b(?:rejoue|replay|revois|montre[- ]moi)\b.*?(\d{1,2}\s*[h:]\s*\d{0,2}|\d{1,2}\s*heures?)", "replay")
 
+    # --- TTS toggle (E35 §1) ---
+    add(r"\b(?:r[ée]ponds?\s+[àa]\s+voix\s+haute|parle|lis\s+[àa]\s+voix\s+haute|voix\s+haute|active\s+la\s+voix|speak\s+(?:out\s+)?loud|read\s+aloud|voice\s+on)\b", "set_tts", tts=True)
+    add(r"\b(?:tais[- ]toi|silence|mode\s+silencieux|coupe\s+la\s+voix|d[ée]sactive\s+la\s+voix|mute|voice\s+off|be\s+quiet)\b", "set_tts", tts=False)
+
     # --- memory ---
     add(r"\b(?:interroge\s+ma\s+m[ée]moire|demande\s+[àa]\s+ma\s+m[ée]moire|ask\s+my\s+memory)\b\s*[:,]?\s*(.*)", "ask_memory")
     add(r"\b(?:rappelle[- ]moi|remind\s+me)\b\s*(.*)", "ask_memory")
@@ -229,6 +233,7 @@ class IntentRouter:
         llm_router: Any = None,
         enrollment: Any = None,
         emit_ui_intent: Callable[[dict[str, Any]], Any] | None = None,
+        replay_service: Any = None,
         person_id: str = "me",
     ) -> None:
         self.vision_focus = vision_focus
@@ -237,6 +242,11 @@ class IntentRouter:
         self.llm_router = llm_router
         self.enrollment = enrollment
         self._emit = emit_ui_intent
+        # E35: when a ReplayService is wired, ``replay`` assembles a real bundle
+        # (keyframes/clips/events/transcript) → virtual_screen + timeline, instead
+        # of a bare ``replay`` device_command. Falls back to the device_command
+        # path (the phone's own replay UI) when no service is injected.
+        self.replay_service = replay_service
         self.person_id = person_id
         self.context = IntentContext()
         self.metrics: dict[str, Any] = {
@@ -454,7 +464,10 @@ class IntentRouter:
         if intent == "ask_memory":
             return self._do_ask_memory(routed)
         if intent == "replay":
-            return self._do_device({"type": "device_command", "action": "replay", "time": routed.get("time")}, intent)
+            return self._do_replay(routed)
+        if intent == "set_tts":
+            on = routed.get("tts")
+            return self._do_device({"type": "device_command", "action": "set_tts", "tts": bool(on)}, intent)
         return self._unknown(text)
 
     def _do_vision(self, routed: dict[str, Any], text: str) -> RoutedIntent:
@@ -498,6 +511,22 @@ class IntentRouter:
             if routed.get(k):
                 cmd[k] = routed[k]
         return self._do_device(cmd, "open_app")
+
+    def _do_replay(self, routed: dict[str, Any]) -> RoutedIntent:
+        time = routed.get("time")
+        # E35: a real ReplayService assembles the bundle + emits virtual_screen +
+        # timeline. Its ``emit_ui_intent`` is the same DataChannel push as ours.
+        if self.replay_service is not None:
+            try:
+                res = self.replay_service.replay(time=time)
+            except Exception:
+                res = None
+            if res is not None:
+                self.context.note(intent="replay")
+                return RoutedIntent(intent="replay", replay=res, handled=True,
+                                    device_command={"type": "device_command", "action": "replay", "time": time})
+        # No service wired → the phone's own replay UI via the device_command path.
+        return self._do_device({"type": "device_command", "action": "replay", "time": time}, "replay")
 
     def _do_paid_mode(self, routed: dict[str, Any]) -> RoutedIntent:
         if self.llm_router is None:

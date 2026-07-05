@@ -114,6 +114,29 @@ namespace MLOmega.XR.Scene
             _ingress.Enqueue(self => self._entitiesHot.ApplyHotUpdate(update, self.NowMs));
         }
 
+        /// <summary>
+        /// Apply a <c>spatial_hot_update</c> (E35 §4a): a recognised session zone +
+        /// map_quality + matching daily routines pushed by the PC scene adapter.
+        /// Additive to the SceneDelta-driven spatial_hot; folds the zone/routines so
+        /// a "ici, d'habitude tu…" card can render from the local cache. Any thread.
+        /// </summary>
+        public void SubmitSpatialHotUpdate(SpatialHotUpdate update)
+        {
+            if (update == null || string.IsNullOrEmpty(update.Zone)) return;
+            _ingress.Enqueue(self => self._spatialHot.ApplyHotUpdate(update, self.NowMs));
+        }
+
+        /// <summary>
+        /// Apply a <c>task_hot_update</c> (E35 §4c): the active task/situation the PC
+        /// scene adapter reports (goal/step/tools) → the single task_hot slot. Any
+        /// thread.
+        /// </summary>
+        public void SubmitTaskHotUpdate(TaskHotUpdate update)
+        {
+            if (update == null || string.IsNullOrEmpty(update.TaskKey)) return;
+            _ingress.Enqueue(self => self._taskHot.ApplyHotUpdate(update, self.NowMs));
+        }
+
         /// <summary>Ingest/refresh a local track (from the device optical-flow path). Any thread.</summary>
         public void SubmitLocalTrack(LocalTrack track)
         {
@@ -280,18 +303,25 @@ namespace MLOmega.XR.Scene
             {
                 if (update == null || string.IsNullOrEmpty(update.EntityId)) return;
                 _relationPacks[update.EntityId] = update;
-                string label = update.Name;
+                // E35 §4b: a durable object carries a Label (+ kind=object); a person
+                // carries a Name. Use whichever is present so both fold into the same
+                // entities_hot store additively.
+                bool isObject = update.IsObject;
+                string label = isObject ? (update.Label ?? update.Name) : (update.Name ?? update.Label);
+                string kind = isObject ? "object" : "person";
                 if (_byId.TryGetValue(update.EntityId, out EntityHot existing))
                 {
-                    // Keep the reconciled confidence/kind/track; just refresh the name.
+                    // Keep the reconciled confidence/track; refresh label + kind.
                     _byId[update.EntityId] = new EntityHot(
-                        update.EntityId, label ?? existing.Label, existing.Kind,
+                        update.EntityId, label ?? existing.Label,
+                        isObject ? "object" : existing.Kind,
                         existing.TrackId, existing.Confidence, nowMs);
                 }
                 else
                 {
+                    double conf = isObject && update.Confidence > 0 ? update.Confidence : 1.0;
                     _byId[update.EntityId] = new EntityHot(
-                        update.EntityId, label, "person", null, 1.0, nowMs);
+                        update.EntityId, label, kind, null, conf, nowMs);
                 }
             }
 
@@ -357,15 +387,37 @@ namespace MLOmega.XR.Scene
             private readonly Dictionary<string, SpatialHot> _byEntity = new Dictionary<string, SpatialHot>();
             private double _lastMapQuality;
             private long _lastMapQualityMs;
+            // E35 §4a: the recognised session zone + its matching daily routines,
+            // pushed by the PC scene adapter (additive to the delta-driven bearings).
+            private SpatialHotUpdate _zonePack;
+            private long _zonePackMs;
 
             public double MapQuality => _lastMapQuality;
             public int Count => _byEntity.Count;
             public IReadOnlyCollection<SpatialHot> All => _byEntity.Values;
 
+            /// <summary>The active zone pack (zone id + routines), if one arrived (E35 §4a).</summary>
+            public SpatialHotUpdate ZonePack => _zonePack;
+            public string ActiveZone => _zonePack?.Zone;
+
             public void NoteMapQuality(double mapQuality, long nowMs)
             {
                 _lastMapQuality = mapQuality;
                 _lastMapQualityMs = nowMs;
+            }
+
+            /// <summary>Fold a PC-pushed zone pack (E35 §4a). Refreshes map_quality
+            /// from the measured value carried by the update.</summary>
+            public void ApplyHotUpdate(SpatialHotUpdate update, long nowMs)
+            {
+                if (update == null || string.IsNullOrEmpty(update.Zone)) return;
+                _zonePack = update;
+                _zonePackMs = nowMs;
+                if (update.MapQuality > 0)
+                {
+                    _lastMapQuality = update.MapQuality;
+                    _lastMapQualityMs = nowMs;
+                }
             }
 
             public void NoteChange(Dictionary<string, object> change, double mapQuality, long nowMs)
@@ -404,6 +456,10 @@ namespace MLOmega.XR.Scene
                 {
                     _lastMapQuality = 0.0;
                 }
+                if (_zonePack != null && nowMs - _zonePackMs > ttlMs)
+                {
+                    _zonePack = null;
+                }
             }
 
             public void Clear()
@@ -411,6 +467,8 @@ namespace MLOmega.XR.Scene
                 _byEntity.Clear();
                 _lastMapQuality = 0.0;
                 _lastMapQualityMs = 0;
+                _zonePack = null;
+                _zonePackMs = 0;
             }
         }
 
@@ -452,6 +510,14 @@ namespace MLOmega.XR.Scene
                     return;
                 }
                 _active = new TaskHot(taskId, goal, step, nowMs);
+            }
+
+            /// <summary>Fold a PC-pushed task hot update (E35 §4c) into the single
+            /// active task slot (task_key → id, goal/step carried through).</summary>
+            public void ApplyHotUpdate(TaskHotUpdate update, long nowMs)
+            {
+                if (update == null || string.IsNullOrEmpty(update.TaskKey)) return;
+                _active = new TaskHot(update.TaskKey, update.Goal, update.Step, nowMs);
             }
 
             public void AgeOut(long nowMs, long ttlMs)
