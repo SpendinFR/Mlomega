@@ -43,3 +43,21 @@ Issu de l'audit d'alignement vision↔livré du 2026-07-04. Principe directeur :
 
 - **E30-A (PC, sans matériel)** : close-day réel complet — Qdrant + Ollama allumés, vie synthétique injectée, 10 stages chronométrés < 6 h sur RTX 3070, journal gpu_phase, doctor -Memory, benchs publiés.
 - **E30-B (matériel)** : gates G1→G8 réels (Unity + SDK XREAL + S25), bench LAN réel, session 3 h, capture-only sur second téléphone, compilation Kotlin/Unity de E22-E26.
+
+
+## E37 — Nuit complète + owner (FAIT — audit de clôture 2026-07-05)
+
+Faille critique réparée : l''audio brut V19 n''était pas archivé → le nocturne (WhisperX+pyannote+attribution voix→personID) n''avait rien à traiter. Segments VAD archivés + events `speech_segment` au format Phone Bridge exact ; bundle bi-modal audio+vision prouvé ; owner enrôlable en V19 (« configure ma voix ») ; `memory_owner_id` garanti sur la chaîne vision ; garde-fou pose placeholder.
+
+## E38 — Intelligence fine (À FAIRE — dernier avant E30-A)
+
+(a) **Auto-confirmation d''hypothèses d''identité** : prénom entendu dans la conversation → associé à la personne présente ; observations répétées multi-sessions renforcent l''hypothèse « ? boulanger » ; promotion automatique probable→observed à seuil avec preuves ; résolution automatique des hypothèses `clarification_inbox_v14_8`/`UNKNOWN_VOICE` quand les signaux convergent (sans enrollment manuel — l''enrollment reste le raccourci).
+(b) **Changements d''attributs bi-modaux** : apparence des personnes connues inter-sessions (coiffure/vêtements — « PersonX a changé de coupe ») ; texte/prix par lieu : OCR mémorisé comparé à la re-visite ET croisé avec les faits ENTENDUS en conversation au même endroit (« hier c''était pas ce prix » — vu ou entendu). Nouveau type ChangeEvent `attribute_changed`.
+(c) **Routine→objet** : l''approche d''une entité liée à une routine fait remonter proactivement le last-seen de l''objet associé (TV → télécommande), depuis `brain2_spatial_routine_models` + co-occurrences.
+
+## ADR §E37 (complément — session coupée avant la doc)
+
+- Format `speech_segment` : découvert dans le cœur (writer du Phone Bridge dans la chaîne sensor_fusion/service V15) et reproduit à l''identique par `audio_archive.py` — colonnes/payload conformes à ce que lisent `bundles_require_deep_audio` et `collect_live_raw_timeline`.
+- Subtilité assembleur : `audio_timeline_json` se remplit via les tours texte (`brainlive_turn_buffer`, modality audio_text) tandis que le déclencheur deep audio lit les events `speech_segment` — les deux coexistent dans le même bundle (bridge conversationnel E31 + archive E37), c''est le fonctionnement nominal V18.8 reproduit.
+- Conflit routeur corrigé : patterns `owner_enroll` enregistrés AVANT `set_tts` (le `\bparle\b` du toggle TTS avalait « c''est moi qui parle »).
+- Quota audio : ligne ajoutée au doctor `-Quota` ; purge par le close-day comme le tampon-jour.

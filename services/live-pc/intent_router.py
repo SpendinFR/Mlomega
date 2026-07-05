@@ -92,15 +92,16 @@ def _build_rules() -> list[tuple[re.Pattern[str], str, dict[str, Any]]]:
     # --- replay ---
     add(r"\b(?:rejoue|replay|revois|montre[- ]moi)\b.*?(\d{1,2}\s*[h:]\s*\d{0,2}|\d{1,2}\s*heures?)", "replay")
 
-    # --- TTS toggle (E35 §1) ---
-    add(r"\b(?:r[ée]ponds?\s+[àa]\s+voix\s+haute|parle|lis\s+[àa]\s+voix\s+haute|voix\s+haute|active\s+la\s+voix|speak\s+(?:out\s+)?loud|read\s+aloud|voice\s+on)\b", "set_tts", tts=True)
-    add(r"\b(?:tais[- ]toi|silence|mode\s+silencieux|coupe\s+la\s+voix|d[ée]sactive\s+la\s+voix|mute|voice\s+off|be\s+quiet)\b", "set_tts", tts=False)
-
-    # --- owner voice setup (E37 §3) ---
+    # --- owner voice setup (E37 §3) — BEFORE set_tts: its "parle"/"voix" words
+    # would otherwise swallow "c'est moi qui parle" / "configure ma voix".
     add(r"\b(?:configure|enregistre|apprends|m[ée]morise)\s+ma\s+voix\b", "owner_enroll")
     add(r"\bc'?est\s+moi\s+qui\s+parle\b", "owner_enroll")
     add(r"\b(?:set\s*up|record|learn)\s+my\s+voice\b", "owner_enroll")
     add(r"\bit'?s\s+me\s+(?:speaking|talking)\b", "owner_enroll")
+
+    # --- TTS toggle (E35 §1) ---
+    add(r"\b(?:r[ée]ponds?\s+[àa]\s+voix\s+haute|parle|lis\s+[àa]\s+voix\s+haute|voix\s+haute|active\s+la\s+voix|speak\s+(?:out\s+)?loud|read\s+aloud|voice\s+on)\b", "set_tts", tts=True)
+    add(r"\b(?:tais[- ]toi|silence|mode\s+silencieux|coupe\s+la\s+voix|d[ée]sactive\s+la\s+voix|mute|voice\s+off|be\s+quiet)\b", "set_tts", tts=False)
 
     # --- memory ---
     add(r"\b(?:interroge\s+ma\s+m[ée]moire|demande\s+[àa]\s+ma\s+m[ée]moire|ask\s+my\s+memory)\b\s*[:,]?\s*(.*)", "ask_memory")
