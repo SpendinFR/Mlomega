@@ -71,6 +71,9 @@ endpoint_resolver = _load_sibling("v19_endpoint_resolver", "endpoint_resolver.py
 stranger_profile = _load_sibling("v19_stranger_profile", "stranger_profile.py")
 audio_archive = _load_sibling("v19_audio_archive", "audio_archive.py")
 owner_setup = _load_sibling("v19_owner_setup", "owner_setup.py")
+hypothesis_engine = _load_sibling("v19_hypothesis_engine", "hypothesis_engine.py")
+attribute_memory = _load_sibling("v19_attribute_memory", "attribute_memory.py")
+routine_associations = _load_sibling("v19_routine_associations", "routine_associations.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -174,6 +177,8 @@ class LivePipeline:
         enable_replay: bool = False,
         enable_stranger_profiles: bool = False,
         enable_audio_archive: bool = False,
+        enable_fine_intel: bool = False,
+        fine_intel_llm: Any = None,
         active_link: str = "lan",
     ) -> None:
         self.session_id = session_id
@@ -381,6 +386,39 @@ class LivePipeline:
                 on_entity_hot_update=self._push_intent,
             )
 
+        # ---- Fine intelligence (E38): identity hypotheses + bi-modal attribute
+        # changes + learned routine→object associations. All generic, all wired to
+        # the SAME transcript/OCR/VLM/approach signals — no hardcoded examples.
+        self.enable_fine_intel = enable_fine_intel
+        self.hypothesis_engine: Any = None
+        self.attribute_memory: Any = None
+        self.routine_associations: Any = None
+        # A generic text-LLM surface for the hypothesis/attribute extractions. The
+        # caller may inject a mock/provider; otherwise the local LLM router is used.
+        self._fine_intel_llm = fine_intel_llm
+        if enable_fine_intel and self.worldbrain is not None:
+            hcfg = self.profile.get("fine_intel", {}) if isinstance(self.profile, dict) else {}
+            self.hypothesis_engine = hypothesis_engine.HypothesisEngine(
+                person_id=self.person_id, llm=fine_intel_llm,
+                worldbrain=self.worldbrain, db_path=db_path,
+                config=hypothesis_engine.HypothesisConfig(
+                    min_occurrences=int(hcfg.get("min_occurrences", 3)),
+                    min_cumulative_confidence=float(hcfg.get("min_cumulative_confidence", 1.2)),
+                ),
+                on_ui_intent=self._push_intent,
+            )
+            self.attribute_memory = attribute_memory.AttributeMemory(
+                person_id=self.person_id, worldbrain=self.worldbrain, llm=fine_intel_llm,
+            )
+            self.routine_associations = routine_associations.RoutineAssociations(
+                person_id=self.person_id, db_path=db_path,
+                worldbrain=self.worldbrain, scene_adapter=self.scene_adapter,
+            )
+            try:
+                self.routine_associations.learn()
+            except Exception:
+                pass
+
         # ---- IntentRouter (E33): voice + menu → one execution path -----------
         # The general router ABSORBS the enrollment_watcher as one of its handlers
         # (identity commands are pre-routed before the general grammar). The LLM
@@ -581,6 +619,16 @@ class LivePipeline:
                 self.worldbrain.ingest_scene_delta(delta)
             except Exception:
                 pass
+        # E38 §3: approaching a zone/entity whose learned routine implies an object
+        # → proactively push that object's last-seen (deduped per session).
+        if self.enable_fine_intel and self.routine_associations is not None:
+            try:
+                place = self._current_place_subject()
+                if place:
+                    visible = [e.get("label") for e in (delta.get("entities") or [])]
+                    self.routine_associations.on_approach(place_key=place, visible_labels=visible)
+            except Exception:
+                pass
         if self._external_scene_cb is not None:
             try:
                 self._external_scene_cb(delta)
@@ -664,6 +712,23 @@ class LivePipeline:
         except Exception:
             pass
 
+    def _maybe_break_hypotheses(self, text: str) -> None:
+        """A voice identity correction breaks the active entity's hypotheses (E38 §1)."""
+        if not self.enable_fine_intel or self.hypothesis_engine is None:
+            return
+        try:
+            cmd = enrollment_watcher.parse_identity_command(text)
+        except Exception:
+            cmd = None
+        if not cmd or cmd.get("intent") != "correct":
+            return
+        entity_id = getattr(self.enrollment, "_active_entity", None) if self.enrollment is not None else None
+        if entity_id:
+            try:
+                self.hypothesis_engine.break_hypotheses_for_entity(entity_id)
+            except Exception:
+                pass
+
     def _run_stranger_profiles(self, frame_bgr: np.ndarray, delta: dict[str, Any]) -> None:
         """Feed each visible person track to the StrangerProfiler (E36 §3)."""
         named_tracks = set(getattr(self.fusion, "_track_identity", {}) if self.fusion is not None else {})
@@ -681,16 +746,101 @@ class LivePipeline:
                 crop = self.vision._crop(frame_bgr, bbox) if bbox else None
                 if crop is not None and getattr(crop, "size", 0) == 0:
                     crop = None
-            self.stranger_profiler.observe_track(
+            profile = self.stranger_profiler.observe_track(
                 track_id, entity_id=entity_id, is_person=True,
                 is_named=is_named, crop_bgr=crop,
             )
+            # E38 §2: a fresh VLM appearance descriptor is stored as attribute
+            # observations of the person entity → inter-session diff = attribute_changed
+            # (same mechanism as any other attribute; no special person path).
+            if (self.enable_fine_intel and self.attribute_memory is not None
+                    and profile is not None and entity_id):
+                try:
+                    self.attribute_memory.observe_person_appearance(
+                        entity_id=entity_id, descriptor=getattr(profile, "attributes", {}) or {},
+                        session=self._brainlive_session_id() or self.session_id,
+                        evidence_ref=f"vlm:{track_id}",
+                    )
+                except Exception:
+                    pass
 
     def _person_entity_id(self, track_id: str) -> str | None:
         """Best-effort WorldBrain entity_id for a person track (if promoted)."""
         if self.worldbrain is None:
             return None
         return self.worldbrain._track_to_entity.get(track_id)  # type: ignore[attr-defined]
+
+    # --------------------------------------------------------------- fine intel (E38)
+    def _present_person_entities(self) -> list[str]:
+        """Confirmed person entity_ids currently in the world picture."""
+        if self.worldbrain is None:
+            return []
+        out: list[str] = []
+        for eid, ent in getattr(self.worldbrain, "entities", {}).items():
+            if getattr(ent, "label", None) == "person" and getattr(ent, "lifecycle", None) == "confirmed":
+                out.append(eid)
+        return out
+
+    def _current_place_subject(self) -> str | None:
+        """Stable subject key for the current place/zone (attribute subject)."""
+        if self.worldbrain is None:
+            return None
+        sess = getattr(self.worldbrain, "session", None)
+        if sess is None:
+            return None
+        return getattr(sess, "active_zone", None) or getattr(sess, "place_hint", None)
+
+    def _note_fine_intel_turn(self, text: str, content: dict[str, Any]) -> None:
+        if not self.enable_fine_intel:
+            return
+        session = self._brainlive_session_id() or self.session_id
+        speaker_entity = self._speaker_entity_for(content)
+        if self.hypothesis_engine is not None:
+            try:
+                self.hypothesis_engine.note_turn(
+                    text, session=session, speaker_entity=speaker_entity,
+                    present_person_entities=self._present_person_entities(),
+                )
+            except Exception:
+                pass
+        if self.attribute_memory is not None:
+            try:
+                self.attribute_memory.note_turn(
+                    text, session=session,
+                    subject_resolver=self._resolve_attribute_subject,
+                    default_subject=self._current_place_subject(),
+                    evidence_ref=f"turn:{content.get('event_id') or ''}",
+                )
+            except Exception:
+                pass
+
+    def _speaker_entity_for(self, content: dict[str, Any]) -> str | None:
+        """Map the turn's speaker (voice-matched person_id) to a present person
+        entity, best-effort. When unknown, None (the heuristic still works off the
+        previous speaker / single present person)."""
+        pid = content.get("speaker_person_id")
+        if not pid or self.worldbrain is None:
+            return None
+        for eid, ent in getattr(self.worldbrain, "entities", {}).items():
+            if getattr(ent, "person_id", None) == pid:
+                return eid
+        return None
+
+    def _resolve_attribute_subject(self, subject_hint: str | None) -> str | None:
+        """Map a free subject hint from the heard-fact extraction to a stable key:
+        a matching visible entity label → its entity_id; else the current place."""
+        if subject_hint and self.worldbrain is not None and hasattr(self.worldbrain, "find_entity"):
+            try:
+                ent = self.worldbrain.find_entity(subject_hint)
+                if ent is not None:
+                    return ent.entity_id
+            except Exception:
+                pass
+        return None
+
+    def _brainlive_session_id(self) -> str | None:
+        conv = self.conversation
+        return getattr(conv, "live_session_id", None) if conv is not None else None
 
     def _run_face_identity(self, frame_bgr: np.ndarray, delta: dict[str, Any]) -> None:
         periodic = (self._frame_counter % self.identity_frame_interval) == 0
@@ -781,6 +931,9 @@ class LivePipeline:
                     self.scene_adapter.note_transcript(text)
                 except Exception:
                     pass
+            # E38 §1/§2: feed the final turn to the fine-intelligence engines — the
+            # addressed-name hypothesis signal and the heard attribute-fact signal.
+            self._note_fine_intel_turn(text, content)
             # E34 §4: fine discourse analysis off the hot path (background worker).
             if self.live_discourse is not None:
                 try:
@@ -826,6 +979,9 @@ class LivePipeline:
             # E36 §3: if this transcript was an enrollment, fold any provisional
             # stranger profile of the active person track into the now-named entity.
             self._maybe_fuse_stranger(text)
+            # E38 §1: a voice identity correction ("non, ce n'est pas X") breaks the
+            # active entity's identity hypotheses (the deduction was wrong).
+            self._maybe_break_hypotheses(text)
             if self.conversation is not None:
                 try:
                     self.conversation.ingest_segment(
@@ -870,7 +1026,22 @@ class LivePipeline:
             rot = int(getattr(envelope, "rotation", 0) or 0) % 360
             if rot:
                 frame_bgr = deorient_frame(frame_bgr, rot)
-        return self.vision.handle_focus(request, frame_bgr, envelope)
+        result = self.vision.handle_focus(request, frame_bgr, envelope)
+        # E38 §2: an OCR reading is an attribute observation of the current place —
+        # fed to the bi-modal attribute memory so a re-visit surfaces a change.
+        if self.enable_fine_intel and self.attribute_memory is not None and isinstance(result, dict):
+            try:
+                content = result.get("content") or {}
+                subject = self._current_place_subject()
+                if content.get("kind") == "ocr" and content.get("lines") and subject:
+                    self.attribute_memory.observe_ocr(
+                        subject=subject, readings=content.get("lines"),
+                        session=self._brainlive_session_id() or self.session_id,
+                        evidence_ref=f"frame:{getattr(envelope, 'frame_id', '?')}",
+                    )
+            except Exception:
+                pass
+        return result
 
     async def run_video(self, *, limit: int | None = None) -> dict[str, Any]:
         """Consume the ingress and drive VisionRT until it stops."""
@@ -951,6 +1122,16 @@ class LivePipeline:
             m["stranger_profiles"] = spm.get("profiles_created", 0)
             m["stranger_vlm_unavailable"] = spm.get("vlm_unavailable", 0)
             m["stranger_fused"] = spm.get("fused", 0)
+        # E38 §4: fine-intelligence metrics.
+        if self.hypothesis_engine is not None:
+            hm = self.hypothesis_engine.metrics
+            m["hypotheses_active"] = len(self.hypothesis_engine.active_hypotheses())
+            m["auto_promotions"] = hm.get("auto_promotions", 0)
+            m["clarifications_resolved"] = hm.get("clarifications_resolved", 0)
+        if self.attribute_memory is not None:
+            m["attribute_changes"] = self.attribute_memory.metrics.get("attribute_changes", 0)
+        if self.routine_associations is not None:
+            m["routine_pushes"] = self.routine_associations.metrics.get("routine_pushes", 0)
         if self.ingress is not None and hasattr(self.ingress, "matcher"):
             try:
                 m["envelope_match"] = self.ingress.matcher.stats()

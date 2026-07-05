@@ -169,7 +169,7 @@ class Relation:
 
 @dataclass
 class ChangeEvent:
-    change_type: str  # appeared | disappeared | moved
+    change_type: str  # appeared | disappeared | moved | attribute_changed
     entity_id: str
     label: str
     observed_at: str
@@ -543,6 +543,67 @@ class WorldBrain:
         if changes:
             self._svc_db.commit()
         return changes
+
+    # ---------------------------------------------------------------- attribute change
+    def record_attribute_change(
+        self,
+        *,
+        subject: str,
+        attribute: str,
+        before: Mapping[str, Any],
+        after: Mapping[str, Any],
+        evidence_refs: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        """Record an ``attribute_changed`` ChangeEvent (E38 §2).
+
+        A value observed for a (subject, attribute) differs from a prior session's
+        value — a bi-modal change (a SEEN value can contradict a HEARD one and
+        vice-versa; the ``source`` on each side records which). Appended to
+        ``change_events``, persisted into ``visual_events_v19`` with a truth_level
+        derived from the two sources, and returned for the scene adapter to surface
+        proactively if relevant. ``subject`` is used as the change's ``entity_id`` so
+        it rides the same channel as spatial changes (a subject may be an entity, a
+        person entity, or a place/zone key — all stable subject strings)."""
+        now_iso = _iso(_utc_now())
+        ev = list(evidence_refs or [])
+        label = getattr(self.entities.get(subject), "label", subject) if isinstance(subject, str) else subject
+        change = ChangeEvent(
+            "attribute_changed", subject, str(label), now_iso,
+            before={"attribute": attribute, **dict(before)},
+            after={"attribute": attribute, **dict(after)},
+            evidence_refs=ev,
+        )
+        self.change_events.append(change)
+        self.metrics["change_events"] += 1
+        try:
+            self._svc_db.execute(
+                "INSERT INTO worldbrain_session_changes(live_session_id, change_type, entity_id, label, observed_at) VALUES(?,?,?,?,?)",
+                (self.live_session_id, change.change_type, subject, str(label), now_iso),
+            )
+            self._svc_db.commit()
+        except Exception:
+            pass
+        # A change confirmed by two independent modalities (seen + heard) is
+        # observed; a single-modality diff is probable (a re-reading could differ).
+        sources = {str(before.get("source") or ""), str(after.get("source") or "")}
+        truth_level = "observed" if len(sources - {""}) >= 2 else "probable"
+        try:
+            store = _load_store()
+            store.store_visual_event({
+                "memory_owner_id": self.person_id,
+                "live_session_id": self.live_session_id,
+                "event_type": "change_attribute_changed",
+                "occurred_at": now_iso,
+                "entity": {"entity_id": subject, "label": str(label), "attribute": attribute},
+                "observation": {"before": change.before, "after": change.after},
+                "truth_level": truth_level,
+                "confidence": 0.7,
+                "evidence": ev,
+                "provenance": {"producer": "attribute_memory"},
+            }, db_path=self.db_path)
+        except Exception:
+            pass
+        return change.to_dict()
 
     # ---------------------------------------------------------------- correction
     @staticmethod
