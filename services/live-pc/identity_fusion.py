@@ -171,6 +171,14 @@ class IdentityFusion:
                 self.metrics["named_entities"] += 1
             except Exception:
                 pass
+            # E34 §5: prefetch the person's relation pack to the device SceneCache
+            # so the ContextCard renders from the local cache with zero round-trip.
+            prefetch = getattr(self.scene_adapter, "prefetch_relation_pack", None)
+            if callable(prefetch):
+                try:
+                    prefetch(entity_id=verdict.entity_id, person_id=verdict.person_id, name=verdict.name)
+                except Exception:
+                    pass
         # Write the name onto the WorldBrain entity so the next SceneDelta / device
         # PersonTag carries it (identity in the entity label).
         if verdict.entity_id and self.worldbrain is not None:

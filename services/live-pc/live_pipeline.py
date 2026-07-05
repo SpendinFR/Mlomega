@@ -61,6 +61,10 @@ enrollment_watcher = _load_sibling("enrollment_watcher", "enrollment_watcher.py"
 llm_providers = _load_sibling("v19_llm_providers", "llm_providers.py")
 memory_query = _load_sibling("v19_memory_query", "memory_query.py")
 intent_router = _load_sibling("v19_intent_router", "intent_router.py")
+proactive_context = _load_sibling("v19_proactive_context", "proactive_context.py")
+predictive_retrieval_live = _load_sibling("v19_predictive_retrieval_live", "predictive_retrieval_live.py")
+live_discourse = _load_sibling("v19_live_discourse", "live_discourse.py")
+morning_briefing = _load_sibling("v19_morning_briefing", "morning_briefing.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -158,6 +162,8 @@ class LivePipeline:
         identity_frame_interval: int = 30,
         enable_intents: bool = False,
         vision_focus_handler: Callable[[dict[str, Any]], Any] | None = None,
+        enable_proactivity: bool = False,
+        predictive_backend: Any = None,
     ) -> None:
         self.session_id = session_id
         self.ingress = ingress
@@ -227,6 +233,18 @@ class LivePipeline:
         self.spatial: Any = None
         self.worldbrain: Any = None
         self.scene_adapter: Any = None
+        # ---- Proactivity (E34): nightly engines → live + dense retrieval --------
+        self.enable_proactivity = enable_proactivity
+        self.proactive: Any = None
+        self.predictive_retrieval: Any = None
+        self.morning_briefing: Any = None
+        if enable_proactivity:
+            self.proactive = proactive_context.ProactiveContext(
+                person_id=self.person_id, db_path=db_path,
+            )
+            self.predictive_retrieval = predictive_retrieval_live.PredictiveRetrievalLive(
+                backend=predictive_backend, db_path=db_path,
+            )
         if enable_worldbrain:
             self.spatial = spatial.PoseKeyframeMap(
                 spatial.SpatialConfig(
@@ -249,7 +267,22 @@ class LivePipeline:
                 worldbrain=self.worldbrain,
                 db_path=db_path,
                 known_people=known_people,
+                proactive=self.proactive,
+                predictive_retrieval=self.predictive_retrieval,
+                on_entity_hot_update=self._push_intent,
             )
+            # E34 §2: load the day's open items so they are ready at session start.
+            if self.proactive is not None:
+                try:
+                    self.proactive.refresh()
+                except Exception:
+                    pass
+            # E34 §6: the morning briefing is built on the first session of the day.
+            if enable_proactivity:
+                self.morning_briefing = morning_briefing.MorningBriefing(
+                    person_id=self.person_id, live_session_id=session_id,
+                    proactive=self.proactive, worldbrain=self.worldbrain, db_path=db_path,
+                )
 
         # ---- ConversationBridge (E31): live transcripts -> BrainLive loop -----
         # Final AudioRT segments are injected into the V18.8 conversational engine
@@ -262,6 +295,12 @@ class LivePipeline:
             self.conversation = globals()["conversation_bridge"].ConversationBridge(
                 person_id=self.person_id,
             )
+        # ---- LiveDiscourse (E34 §4): fine discourse analysis of live turns off
+        # the hot path — final turns are batched and analysed by the core
+        # microscope/discourse pipeline in a background worker (never blocks).
+        self.live_discourse: Any = None
+        if enable_proactivity and enable_conversation:
+            self.live_discourse = live_discourse.LiveDiscourse(person_id=self.person_id)
 
         # ---- Identity (E32): face + voice + fusion + enrollment ---------------
         # Face runs on person crops at an ECONOMICAL cadence (new person track or
@@ -456,6 +495,12 @@ class LivePipeline:
                     self.scene_adapter.note_transcript(text)
                 except Exception:
                     pass
+            # E34 §4: fine discourse analysis off the hot path (background worker).
+            if self.live_discourse is not None:
+                try:
+                    self.live_discourse.note_turn(text, speaker_label=content.get("speaker_label"))
+                except Exception:
+                    pass
             # Identity (E32): the enrollment_watcher pre-routes "retiens : c'est X"
             # / "non ce n'est pas X" BEFORE conversation ingestion (a device
             # command, not a memory turn). Voice matching sets the speaker on the
@@ -501,11 +546,26 @@ class LivePipeline:
         return intents
 
     def end_session(self, *, place_hint: str | None = None) -> str | None:
-        """Flush the WorldBrain end-of-session summary (E28)."""
+        """Flush the WorldBrain end-of-session summary (E28) + discourse (E34)."""
+        if self.live_discourse is not None:
+            try:
+                self.live_discourse.close()
+            except Exception:
+                pass
         if self.worldbrain is None:
             return None
         try:
             return self.worldbrain.end_session(place_hint=place_hint)
+        except Exception:
+            return None
+
+    def deliver_morning_briefing(self, *, force: bool = False) -> dict[str, Any] | None:
+        """Deliver the first-session-of-the-day briefing card (E34 §6). Safe to
+        call once at session start; dedups naturally on ``briefing:<date>``."""
+        if self.morning_briefing is None:
+            return None
+        try:
+            return self.morning_briefing.maybe_deliver(force=force)
         except Exception:
             return None
 
@@ -573,6 +633,19 @@ class LivePipeline:
         if self.llm_router is not None:
             m["cloud_mode"] = self.llm_router.mode
             m["cloud_active"] = self.llm_router.cloud_active
+        if self.scene_adapter is not None and self.enable_proactivity:
+            sm = self.scene_adapter.metrics
+            m["proactive_predictions"] = sm.get("proactive_predictions", 0)
+            m["proactive_interventions"] = sm.get("proactive_interventions", 0)
+            m["clarifications_asked"] = sm.get("clarifications_asked", 0)
+            m["similar_experiences"] = sm.get("similar_experiences", 0)
+            m["entity_hot_updates"] = sm.get("entity_hot_updates", 0)
+        if self.live_discourse is not None:
+            dm = self.live_discourse.metrics
+            m["discourse_turns"] = dm.get("turns_seen", 0)
+            m["discourse_flushes"] = dm.get("flushes", 0)
+        if self.morning_briefing is not None:
+            m["briefings_enqueued"] = self.morning_briefing.metrics.get("briefings_enqueued", 0)
         if self.ingress is not None and hasattr(self.ingress, "matcher"):
             try:
                 m["envelope_match"] = self.ingress.matcher.stats()

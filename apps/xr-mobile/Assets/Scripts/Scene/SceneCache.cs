@@ -101,6 +101,19 @@ namespace MLOmega.XR.Scene
             _ingress.Enqueue(self => self.ApplySceneDelta(delta));
         }
 
+        /// <summary>
+        /// Apply an <c>entity_hot_update</c> (E34 §5): a prefetched relation pack
+        /// for a just-identified person, pushed by the PC scene adapter the moment
+        /// identity_fusion names someone. The device folds it into entities_hot so
+        /// the ContextCard renders from the local cache with zero round-trip.
+        /// Safe to call from any thread.
+        /// </summary>
+        public void SubmitEntityHotUpdate(EntityHotUpdate update)
+        {
+            if (update == null || string.IsNullOrEmpty(update.EntityId)) return;
+            _ingress.Enqueue(self => self._entitiesHot.ApplyHotUpdate(update, self.NowMs));
+        }
+
         /// <summary>Ingest/refresh a local track (from the device optical-flow path). Any thread.</summary>
         public void SubmitLocalTrack(LocalTrack track)
         {
@@ -232,12 +245,20 @@ namespace MLOmega.XR.Scene
         public sealed class EntitiesHotSubCache
         {
             private readonly Dictionary<string, EntityHot> _byId = new Dictionary<string, EntityHot>();
+            // E34 §5: prefetched relation pack (name + last topics / promises) per
+            // entity, delivered ahead of the ContextCard so it renders locally.
+            private readonly Dictionary<string, EntityHotUpdate> _relationPacks =
+                new Dictionary<string, EntityHotUpdate>();
 
             public int Count => _byId.Count;
             public IReadOnlyCollection<EntityHot> All => _byId.Values;
 
             public bool TryGet(string entityId, out EntityHot entity) =>
                 _byId.TryGetValue(entityId ?? string.Empty, out entity);
+
+            /// <summary>The prefetched relation pack for an entity, if one arrived.</summary>
+            public bool TryGetRelationPack(string entityId, out EntityHotUpdate pack) =>
+                _relationPacks.TryGetValue(entityId ?? string.Empty, out pack);
 
             public void Reconcile(Dictionary<string, object> e, long nowMs)
             {
@@ -249,6 +270,29 @@ namespace MLOmega.XR.Scene
                 string trackId = AsString(e, "track_id") ?? AsString(e, "last_track");
                 double confidence = AsDouble(e, "confidence", 0.0);
                 _byId[id] = new EntityHot(id, label, kind, trackId, confidence, nowMs);
+            }
+
+            /// <summary>
+            /// Fold a prefetched relation pack into entities_hot (E34 §5). Additive:
+            /// it seeds/refreshes the entity's name + person id and stores the pack.
+            /// </summary>
+            public void ApplyHotUpdate(EntityHotUpdate update, long nowMs)
+            {
+                if (update == null || string.IsNullOrEmpty(update.EntityId)) return;
+                _relationPacks[update.EntityId] = update;
+                string label = update.Name;
+                if (_byId.TryGetValue(update.EntityId, out EntityHot existing))
+                {
+                    // Keep the reconciled confidence/kind/track; just refresh the name.
+                    _byId[update.EntityId] = new EntityHot(
+                        update.EntityId, label ?? existing.Label, existing.Kind,
+                        existing.TrackId, existing.Confidence, nowMs);
+                }
+                else
+                {
+                    _byId[update.EntityId] = new EntityHot(
+                        update.EntityId, label, "person", null, 1.0, nowMs);
+                }
             }
 
             public void AgeOut(long nowMs, long ttlMs)
@@ -264,11 +308,19 @@ namespace MLOmega.XR.Scene
                 }
                 if (dead != null)
                 {
-                    foreach (string id in dead) _byId.Remove(id);
+                    foreach (string id in dead)
+                    {
+                        _byId.Remove(id);
+                        _relationPacks.Remove(id);
+                    }
                 }
             }
 
-            public void Clear() => _byId.Clear();
+            public void Clear()
+            {
+                _byId.Clear();
+                _relationPacks.Clear();
+            }
         }
 
         public readonly struct EntityHot
