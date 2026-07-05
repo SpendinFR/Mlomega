@@ -80,3 +80,34 @@ models:
     # is available in the index.
     license: MIT
     pairs: [en-fr, fr-en]
+
+  # --- Local TTS voices (sherpa-onnx OfflineTts, E35) ----------------------
+  # Piper/VITS voices from the sherpa-onnx TTS model zoo. Distributed as
+  # .tar.bz2 archives (model.onnx + tokens.txt + espeak-ng-data). The Piper
+  # voices are released under the MIT license (Piper); the bundled espeak-ng
+  # data is GPL-3.0 (kept as runtime data, never linked into our code). Chosen
+  # from the two authoritative sources consulted (ADR §E35):
+  #   1. sherpa-onnx TTS model releases (k2-fsa) — the canonical index of vetted
+  #      offline voices, each with a direct archive URL;
+  #   2. the Piper voices catalogue (rhasspy) — voice quality + per-voice license.
+  # ``archive`` is fetched + sha256-verified then extracted so ``path`` exists.
+  # sha256 is pinned on first successful fetch (fetch_models_v19.py records it).
+  tts_fr:
+    provider: sherpa_onnx
+    # French voice (Piper/VITS siwis, MIT). Extract yields the .onnx + tokens.
+    license: MIT
+    path: models/vits-piper-fr_FR-siwis-medium/fr_FR-siwis-medium.onnx
+    archive: https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-fr_FR-siwis-medium.tar.bz2
+    archive_sha256: PENDING_FETCH
+    extract_to: models
+    max_vram_mb: 128
+
+  tts_en:
+    provider: sherpa_onnx
+    # English voice (Piper/VITS amy, MIT). Extract yields the .onnx + tokens.
+    license: MIT
+    path: models/vits-piper-en_US-amy-low/en_US-amy-low.onnx
+    archive: https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-amy-low.tar.bz2
+    archive_sha256: PENDING_FETCH
+    extract_to: models
+    max_vram_mb: 128
