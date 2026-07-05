@@ -204,6 +204,10 @@ class BrainLiveSceneAdapter:
         self.predictive_retrieval = predictive_retrieval
         self._on_entity_hot_update = on_entity_hot_update
         self._prefetched_people: set[str] = set()
+        # E35 §4: generalised hot-context dedup sets (one push per subject/session).
+        self._pushed_objects: set[str] = set()
+        self._pushed_zones: set[str] = set()
+        self._pushed_tasks: set[str] = set()
         self.metrics = {
             "hot_context_builds": 0,
             "deliveries_enqueued": 0,
@@ -212,12 +216,18 @@ class BrainLiveSceneAdapter:
             "clarifications_asked": 0,
             "similar_experiences": 0,
             "entity_hot_updates": 0,
+            "spatial_hot_updates": 0,
+            "object_hot_updates": 0,
+            "task_hot_updates": 0,
         }
         self._last_build_ts = 0.0
 
     # ----------------------------------------------------------------- context
     def set_active_task(self, task: Mapping[str, Any] | None) -> None:
         self._active_task = dict(task) if task else None
+        # E35 §4c: a task starting / advancing → push task_hot to the device.
+        if self._active_task:
+            self.push_task_hot(self._active_task)
 
     def note_transcript(self, text: str) -> None:
         """AudioRT transcript → conversation context for situation detection."""
@@ -394,6 +404,139 @@ class BrainLiveSceneAdapter:
             return None
         return message
 
+    # ------------------------------------------------ generalised hot (E35 §4)
+    def _emit_hot(self, message: dict[str, Any], metric: str) -> dict[str, Any] | None:
+        """Push a hot-update message to the device SceneCache (same DataChannel as
+        the E34 entity prefetch). Bounded by a per-message budget; a message that
+        would exceed it is not sent (never an unbounded push)."""
+        import json
+
+        if self._on_entity_hot_update is None:
+            return None
+        if len(json.dumps(message, default=str)) > self.config.hot_budget_chars:
+            return None
+        try:
+            self._on_entity_hot_update(message)
+        except Exception:
+            return None
+        self.metrics[metric] = self.metrics.get(metric, 0) + 1
+        return message
+
+    def push_spatial_hot(self, *, snapshot: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+        """(a) When a session zone / place is recognised, push a ``spatial_hot_update``
+        to SceneCache.spatial_hot: the active zone, measured map_quality, a few
+        useful last-seens *of that zone*, and any daily routine that matches here
+        ("ici, d'habitude tu…"). One push per zone per session (dedup)."""
+        snap = snapshot or self.world.snapshot()
+        zone = snap.get("active_zone") or snap.get("place_hint")
+        if not zone:
+            return None
+        key = str(zone)
+        if key in self._pushed_zones:
+            return None
+        self._pushed_zones.add(key)
+        # a few useful last-seen entities (phone/keys-class) tied to this session
+        last_seens = [
+            {"entity_id": e.get("entity_id"), "label": e.get("label"),
+             "age_seconds": e.get("age_seconds"), "lifecycle": e.get("lifecycle")}
+            for e in (snap.get("entities") or [])
+            if e.get("lifecycle") in ("last_seen", "confirmed")
+        ][:4]
+        message = {
+            "type": "spatial_hot_update",
+            "zone": key,
+            "place_hint": snap.get("place_hint"),
+            "map_quality": snap.get("map_quality"),
+            "last_seens": last_seens,
+            "routines": self._matching_routines(place_key=key),
+            "as_of": _iso_now(),
+        }
+        return self._emit_hot(message, "spatial_hot_updates")
+
+    def push_object_hot(self, entity: Mapping[str, Any]) -> dict[str, Any] | None:
+        """(b) A durable object promoted / found again → ``entity_hot_update`` with
+        ``kind='object'`` (last_seen, relations). Generalises the E34 person path.
+        One push per object per session."""
+        eid = str(entity.get("entity_id") or "")
+        if not eid or eid in self._pushed_objects:
+            return None
+        self._pushed_objects.add(eid)
+        message = {
+            "type": "entity_hot_update",
+            "kind": "object",
+            "entity_id": eid,
+            "label": entity.get("label"),
+            "last_seen": entity.get("last_seen"),
+            "confidence": entity.get("confidence"),
+            "relations": self._entity_relations(eid),
+            "as_of": _iso_now(),
+        }
+        return self._emit_hot(message, "object_hot_updates")
+
+    def push_task_hot(self, task: Mapping[str, Any]) -> dict[str, Any] | None:
+        """(c) An active task / situation started → ``task_hot_update`` to
+        SceneCache.task_hot: goal, current step, tools. One push per task per
+        session (re-pushed only when the step changes)."""
+        task_key = str(task.get("task_key") or task.get("goal") or "active")
+        step = str(task.get("next_step") or task.get("step") or "")
+        dedup = f"{task_key}:{step}"
+        if dedup in self._pushed_tasks:
+            return None
+        self._pushed_tasks.add(dedup)
+        message = {
+            "type": "task_hot_update",
+            "task_key": task_key,
+            "goal": task.get("goal") or task.get("title"),
+            "step": step or None,
+            "tools": list(task.get("tools") or [])[:6],
+            "as_of": _iso_now(),
+        }
+        return self._emit_hot(message, "task_hot_updates")
+
+    def _entity_relations(self, entity_id: str) -> list[dict[str, Any]]:
+        """Current-frame relations involving this entity (compact)."""
+        try:
+            rels = self.world.snapshot().get("relations") or []
+        except Exception:
+            return []
+        out: list[dict[str, Any]] = []
+        for r in rels:
+            if entity_id in (r.get("subject"), r.get("object")):
+                out.append({k: r.get(k) for k in ("subject", "predicate", "object")})
+        return out[:4]
+
+    def _matching_routines(self, *, place_key: str) -> list[dict[str, Any]]:
+        """(d) Daily routines of ``brain2_spatial_routine_models`` that match the
+        current place → included in the spatial hot pack ("ici, d'habitude tu…").
+        Best-effort; a cold/absent table yields []."""
+        try:
+            from mlomega_audio_elite.db import connect  # type: ignore
+        except Exception:
+            return []
+        pk = (place_key or "").lower()
+        try:
+            with connect(self.db_path) as con:
+                rows = [dict(r) for r in con.execute(
+                    """SELECT entity_key, place_key, time_slot, occurrence_count, confidence
+                       FROM brain2_spatial_routine_models
+                       WHERE person_id=? ORDER BY confidence DESC, occurrence_count DESC LIMIT 20""",
+                    (self.person_id,),
+                ).fetchall()]
+        except Exception:
+            return []
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            rp = str(r.get("place_key") or "").lower()
+            # match on place equality or containment either way (zone ids vs hints)
+            if rp and (rp == pk or rp in pk or pk in rp):
+                out.append({
+                    "entity_key": r.get("entity_key"), "place_key": r.get("place_key"),
+                    "time_slot": r.get("time_slot"), "confidence": r.get("confidence"),
+                })
+            if len(out) >= 3:
+                break
+        return out
+
     def _relation_pack(self, person_id: str) -> list[dict[str, Any]]:
         """Compact relation pack (last topics / promises) for a person from the
         core relationship tables via ``build_active_context``. Best-effort."""
@@ -424,6 +567,15 @@ class BrainLiveSceneAdapter:
         self._ensure_session()
         results: list[dict[str, Any]] = []
         evidence = list(ctx.get("evidence_refs") or [])
+
+        # E35 §4a/§4b: generalise the hot-context pushes. A recognised session zone
+        # → spatial_hot (+ matching daily routines). Durable/reappeared objects →
+        # entity_hot_update kind=object. Both deduped per subject per session.
+        snap = self.world.snapshot()
+        self.push_spatial_hot(snapshot=snap)
+        for e in snap.get("entities") or []:
+            if e.get("lifecycle") in ("confirmed", "last_seen") and e.get("label") != "person":
+                self.push_object_hot(e)
 
         # (1) Known person in scene → ContextCard.
         for p in ctx.get("people_identified") or []:

@@ -65,6 +65,8 @@ proactive_context = _load_sibling("v19_proactive_context", "proactive_context.py
 predictive_retrieval_live = _load_sibling("v19_predictive_retrieval_live", "predictive_retrieval_live.py")
 live_discourse = _load_sibling("v19_live_discourse", "live_discourse.py")
 morning_briefing = _load_sibling("v19_morning_briefing", "morning_briefing.py")
+tts_local = _load_sibling("v19_tts_local", "tts_local.py")
+replay_service_mod = _load_sibling("v19_replay_service", "replay_service.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -164,6 +166,8 @@ class LivePipeline:
         vision_focus_handler: Callable[[dict[str, Any]], Any] | None = None,
         enable_proactivity: bool = False,
         predictive_backend: Any = None,
+        enable_tts: bool = False,
+        enable_replay: bool = False,
     ) -> None:
         self.session_id = session_id
         self.ingress = ingress
@@ -329,7 +333,14 @@ class LivePipeline:
             )
             self.enrollment = enrollment_watcher.EnrollmentWatcher(
                 face_identity=self.face, voice_identity=self.voice_identity,
-                fusion=self.fusion, person_id=self.person_id,
+                fusion=self.fusion, worldbrain=self.worldbrain, person_id=self.person_id,
+                emit_ui_intent=self._push_intent,
+            )
+        elif self.worldbrain is not None:
+            # E35 §3: even without face/voice identity, a WorldBrain-backed watcher
+            # handles OBJECT / PLACE voice corrections ("ce n'est pas mon téléphone").
+            self.enrollment = enrollment_watcher.EnrollmentWatcher(
+                worldbrain=self.worldbrain, person_id=self.person_id,
                 emit_ui_intent=self._push_intent,
             )
 
@@ -343,6 +354,23 @@ class LivePipeline:
         self.memory_query: Any = None
         self.intents: Any = None
         self.vision_focus_handler = vision_focus_handler
+
+        # ---- TTS (E35 §1): short spoken replies when the profile opts in --------
+        self.enable_tts = enable_tts
+        self.tts: Any = None
+        self._tts_on = tts_local.profile_tts_enabled(self.user_profile)
+        if enable_tts:
+            self.tts = tts_local.build_tts_provider(self.user_profile)
+
+        # ---- Replay (E35 §2): time-range bundle → virtual_screen + timeline -----
+        self.enable_replay = enable_replay
+        self.replay: Any = None
+        if enable_replay:
+            self.replay = replay_service_mod.ReplayService(
+                person_id=self.person_id, live_session_id=self.session_id,
+                db_path=self.db_path, emit_ui_intent=self._push_intent,
+            )
+
         if enable_intents:
             self.llm_router = llm_providers.LLMRouter(
                 profile=self.user_profile,
@@ -356,6 +384,7 @@ class LivePipeline:
                 llm_router=self.llm_router,
                 enrollment=self.enrollment,
                 emit_ui_intent=self._push_intent,
+                replay_service=self.replay,
                 person_id=self.person_id,
             )
 
@@ -371,12 +400,46 @@ class LivePipeline:
                 pass
 
     def _push_device_command(self, cmd: dict[str, Any]) -> None:
-        """Push a device_command message to Unity over the same DataChannel (E33 §4)."""
+        """Push a device_command message to Unity over the same DataChannel (E33 §4).
+
+        E35 §1: a ``set_tts`` command is a LOCAL toggle (voice on/off) — applied here
+        and still forwarded so the device StatusBar can reflect the state."""
+        if isinstance(cmd, dict) and cmd.get("action") == "set_tts":
+            self.set_tts(bool(cmd.get("tts")))
         if self.ingress is not None and hasattr(self.ingress, "send_ui_intent"):
             try:
                 self.ingress.send_ui_intent(json.dumps(cmd))
             except Exception:
                 pass
+
+    # ------------------------------------------------------------------ TTS (E35 §1)
+    def set_tts(self, on: bool) -> None:
+        """Toggle spoken replies at runtime (« réponds à voix haute » / « silence »
+        via an intent or the menu device_command). Independent of the profile default."""
+        self._tts_on = bool(on)
+
+    def speak_reply(self, text: str, *, lang: str = "fr", force: bool = False) -> dict[str, Any] | None:
+        """Synthesise a short reply and push it as a bounded ``tts_audio`` message.
+
+        Only speaks when TTS is enabled AND (the profile/toggle is on OR ``force``).
+        Returns the pushed message, or None (disabled / no provider / too long /
+        synthesis unavailable → silent, the ContextCard already carries the text)."""
+        if not self.enable_tts or self.tts is None:
+            return None
+        if not (self._tts_on or force):
+            return None
+        text = (text or "").strip()
+        if not text:
+            return None
+        try:
+            wav = self.tts.speak(text, lang=lang)
+        except Exception:
+            return None
+        msg = tts_local.tts_audio_message(wav, lang=lang, text=text)
+        if msg is None:  # too long to fit the DataChannel budget → text card only
+            return None
+        self._push_intent(msg)
+        return msg
 
     def _route_vision_focus(self, request: dict[str, Any]) -> Any:
         """Bridge a router vision intent (what_is/find/ocr/zoom) to the vision handler.

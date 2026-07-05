@@ -39,16 +39,38 @@ namespace MLOmega.XR.UI
 
         private void OnTransportMessage(string json) => TryHandleRaw(json);
 
-        /// <summary>Parse and apply a raw message if it is an entity_hot_update.
-        /// Returns true when it was one (claimed), false otherwise. Never throws.</summary>
+        /// <summary>Parse and apply a raw hot-update message. Claims any of the four
+        /// generalised hot messages (E35 §4): entity (person or object), spatial
+        /// (zone), task. Returns true when it was one (claimed). Never throws.</summary>
         public bool TryHandleRaw(string json)
         {
-            if (!EntityHotUpdate.IsEntityHotUpdate(json)) return false;
-            EntityHotUpdate update;
-            try { update = JsonConvert.DeserializeObject<EntityHotUpdate>(json); }
-            catch (Exception ex) { Debug.LogWarning($"[EntityHotUpdate] bad json: {ex.Message}"); return true; }
-            if (update != null) Apply(update);
-            return true;
+            if (EntityHotUpdate.IsEntityHotUpdate(json))
+            {
+                EntityHotUpdate update;
+                try { update = JsonConvert.DeserializeObject<EntityHotUpdate>(json); }
+                catch (Exception ex) { Debug.LogWarning($"[EntityHotUpdate] bad json: {ex.Message}"); return true; }
+                if (update != null) Apply(update);
+                return true;
+            }
+            if (SpatialHotUpdate.IsSpatialHotUpdate(json))
+            {
+                SpatialHotUpdate update;
+                try { update = JsonConvert.DeserializeObject<SpatialHotUpdate>(json); }
+                catch (Exception ex) { Debug.LogWarning($"[SpatialHotUpdate] bad json: {ex.Message}"); return true; }
+                if (update != null && _sceneCache != null) _sceneCache.SubmitSpatialHotUpdate(update);
+                if (update != null) HotUpdateApplied?.Invoke(update.Zone, "spatial");
+                return true;
+            }
+            if (TaskHotUpdate.IsTaskHotUpdate(json))
+            {
+                TaskHotUpdate update;
+                try { update = JsonConvert.DeserializeObject<TaskHotUpdate>(json); }
+                catch (Exception ex) { Debug.LogWarning($"[TaskHotUpdate] bad json: {ex.Message}"); return true; }
+                if (update != null && _sceneCache != null) _sceneCache.SubmitTaskHotUpdate(update);
+                if (update != null) HotUpdateApplied?.Invoke(update.TaskKey, "task");
+                return true;
+            }
+            return false;
         }
 
         /// <summary>Fold a parsed prefetch into the scene cache. Null-safe.</summary>
