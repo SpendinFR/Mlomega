@@ -31,6 +31,38 @@ namespace MLOmega.XR.Core
         Fr = 1
     }
 
+    /// <summary>
+    /// E36 §1 — one ordered PC endpoint the client may reach the SessionHub at.
+    /// Outside the home the phone is on 4G/5G and the PC is behind NAT; a single
+    /// LAN IP no longer works. The client tries the endpoints IN ORDER (LAN first,
+    /// then a VPN-tunnel address such as Tailscale 100.x) and uses the first whose
+    /// <c>/health</c> answers. See <see cref="MLOmegaConfig.Endpoints"/>.
+    /// </summary>
+    [System.Serializable]
+    public sealed class PcEndpoint
+    {
+        [Tooltip("Friendly name, e.g. 'lan' or 'tailscale'. First entry is preferred.")]
+        [SerializeField] private string _name = "lan";
+
+        [Tooltip("Hostname or IP of the PC running the SessionHub / gateway.")]
+        [SerializeField] private string _host = "192.168.1.10";
+
+        [Tooltip("SessionHub HTTP port. V19 uses the 87xx range (never 8766).")]
+        [SerializeField] private int _port = 8710;
+
+        [Tooltip("Use https for this endpoint's base URL.")]
+        [SerializeField] private bool _useTls;
+
+        public string Name => _name;
+        public string Host => _host;
+        public int Port => _port;
+        public bool UseTls => _useTls;
+
+        public string BaseUrl => $"{(_useTls ? "https" : "http")}://{_host}:{_port}";
+        public string HealthUrl => $"{BaseUrl}/health";
+        public string WebrtcOfferUrl => $"{BaseUrl}/webrtc/offer";
+    }
+
     [CreateAssetMenu(
         fileName = "MLOmegaConfig",
         menuName = "MLOmega/Config/MLOmega Config",
@@ -46,6 +78,13 @@ namespace MLOmega.XR.Core
 
         [Tooltip("Use https for the SessionHub base URL.")]
         [SerializeField] private bool _useTls;
+
+        [Header("Outside access — endpoint failover (E36)")]
+        [Tooltip("Ordered PC endpoints tried in order (LAN first, then a VPN tunnel " +
+                 "like Tailscale 100.x). The first whose /health answers is used; if " +
+                 "it drops, the client fails over to the next. Left empty → the single " +
+                 "_pcHost above is used (backward compatible).")]
+        [SerializeField] private PcEndpoint[] _endpoints = new PcEndpoint[0];
 
         [Tooltip("This device's stable id, sent when creating a session.")]
         [SerializeField] private string _deviceId = "s25-primary";
@@ -115,8 +154,36 @@ namespace MLOmega.XR.Core
         public string WakeWord => _wakeWord;
         public ReflexAsrLanguage AsrLanguage => _asrLanguage;
 
+        /// <summary>The configured endpoint list (may be empty).</summary>
+        public PcEndpoint[] Endpoints => _endpoints;
+
+        /// <summary>
+        /// E36 §1 — the ordered endpoints the client should try, LAN/preferred first.
+        /// When <see cref="Endpoints"/> is empty this yields a single implicit
+        /// endpoint built from the legacy <c>_pcHost</c> so existing configs keep
+        /// working. <see cref="SessionPairing"/> probes these in order and fails over.
+        /// </summary>
+        public PcEndpoint[] ResolvedEndpoints
+        {
+            get
+            {
+                if (_endpoints != null && _endpoints.Length > 0)
+                {
+                    return _endpoints;
+                }
+                var single = new PcEndpoint();
+                // Mirror the legacy single-host fields onto the implicit endpoint via
+                // JSON so the private serialized fields are populated without a ctor.
+                UnityEngine.JsonUtility.FromJsonOverwrite(
+                    $"{{\"_name\":\"lan\",\"_host\":\"{_pcHost}\",\"_port\":{_sessionHubPort}," +
+                    $"\"_useTls\":{(_useTls ? "true" : "false")}}}", single);
+                return new[] { single };
+            }
+        }
+
         /// <summary>
         /// Base URL for the SessionHub, e.g. <c>http://192.168.1.10:8710</c>.
+        /// Uses the first resolved endpoint (LAN unless overridden by failover).
         /// </summary>
         public string SessionHubBaseUrl =>
             $"{(_useTls ? "https" : "http")}://{_pcHost}:{_sessionHubPort}";

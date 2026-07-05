@@ -363,6 +363,35 @@ class FakeXrWebrtcClient:
         return {"frames_sent": track._idx, "envelopes_sent": self.sent_envelopes}
 
 
+def resolve_offer_url(
+    endpoints: Any,
+    *,
+    probe: Any = None,
+    timeout_s: float = 2.0,
+) -> tuple[str | None, dict[str, Any]]:
+    """E36 §1: pick the first reachable PC endpoint and return its /webrtc/offer URL.
+
+    ``endpoints`` is the ordered list (config shape accepted by
+    ``endpoint_resolver.parse_endpoints``: a list of {name,host,port} or a bare
+    host). Returns ``(offer_url_or_None, resolve_result_dict)``. When no endpoint
+    answers, ``offer_url`` is None and the result carries ``pc_unreachable`` — the
+    caller stays in the device-only reflex mode (honest degrade)."""
+    import importlib.util as _iu
+
+    spec = _iu.spec_from_file_location(
+        "v19_endpoint_resolver",
+        Path(__file__).resolve().parents[1] / "services" / "live-pc" / "endpoint_resolver.py",
+    )
+    assert spec and spec.loader
+    er = _iu.module_from_spec(spec)
+    spec.loader.exec_module(er)
+    eps = er.parse_endpoints(endpoints)
+    resolver = er.EndpointResolver(eps, probe=probe, timeout_s=timeout_s)
+    result = resolver.resolve()
+    url = result.active.webrtc_offer_url if result.active else None
+    return url, result.to_dict()
+
+
 async def _main() -> None:
     parser = argparse.ArgumentParser(description="Fake XR device (WebRTC or in-memory)")
     parser.add_argument("--frames", type=int, default=30)
@@ -374,11 +403,34 @@ async def _main() -> None:
     parser.add_argument("--pose-jsonl", type=Path, help="pose JSONL (else synthetic)")
     parser.add_argument("--jsonl", type=Path, help="write generated envelopes to JSONL (in-memory mode)")
     parser.add_argument("--offer-url", type=str, help="gateway /offer or /webrtc/offer URL -> real WebRTC mode")
+    parser.add_argument(
+        "--endpoints", type=str,
+        help="E36: ordered comma-separated host[:port] list (LAN first, then tunnel). "
+             "The first reachable /health wins; overrides --offer-url when set.",
+    )
     parser.add_argument("--session-id", type=str, default="sim-session")
     parser.add_argument("--token", type=str, help="session token for the unified /webrtc/offer endpoint")
     args = parser.parse_args()
 
     rotation = 90 if args.rotate90 else args.rotation
+
+    # E36 §1: an ordered endpoint list is resolved (LAN → tunnel) with a health
+    # probe; the winning endpoint's /webrtc/offer URL replaces --offer-url.
+    if args.endpoints:
+        eps = []
+        for i, item in enumerate(args.endpoints.split(",")):
+            item = item.strip()
+            if not item:
+                continue
+            host, _, port = item.partition(":")
+            eps.append({"name": ("lan" if i == 0 else f"endpoint{i + 1}"),
+                        "host": host, "port": int(port) if port else 8710})
+        url, result = resolve_offer_url(eps)
+        print(json.dumps({"resolve": result}))
+        if url is None:
+            print(json.dumps({"status": "pc_unreachable", "reflex_only": True}))
+            return
+        args.offer_url = url
 
     if args.offer_url:
         client = FakeXrWebrtcClient(

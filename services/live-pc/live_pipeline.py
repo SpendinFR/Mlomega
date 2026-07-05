@@ -67,6 +67,8 @@ live_discourse = _load_sibling("v19_live_discourse", "live_discourse.py")
 morning_briefing = _load_sibling("v19_morning_briefing", "morning_briefing.py")
 tts_local = _load_sibling("v19_tts_local", "tts_local.py")
 replay_service_mod = _load_sibling("v19_replay_service", "replay_service.py")
+endpoint_resolver = _load_sibling("v19_endpoint_resolver", "endpoint_resolver.py")
+stranger_profile = _load_sibling("v19_stranger_profile", "stranger_profile.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -168,6 +170,8 @@ class LivePipeline:
         predictive_backend: Any = None,
         enable_tts: bool = False,
         enable_replay: bool = False,
+        enable_stranger_profiles: bool = False,
+        active_link: str = "lan",
     ) -> None:
         self.session_id = session_id
         self.ingress = ingress
@@ -226,7 +230,20 @@ class LivePipeline:
             arbiter=arbiter,
             on_intent=self._push_intent,
         )
-        self.degraded = degraded.DegradedStateMachine()
+        # E36 §1: distinct lan/wan network thresholds. Outside-the-home the link is a
+        # VPN tunnel over 4G/5G — a higher latency ceiling + a lower target video
+        # height so the tunnel is not saturated. The PC detector cadence never
+        # changes with the link (it runs locally), and the device reflex paths do
+        # not depend on the PC. ``active_link`` (lan|wan) selects the profile.
+        dcfg = self.profile.get("degraded", {}) if isinstance(self.profile, dict) else {}
+        self.network_profiles = degraded.network_profiles_from_config(dcfg)
+        self.active_link = str(active_link or "lan")
+        # E36 §1: the resolved PC endpoint that this session reached the PC through
+        # (LAN or tunnel); surfaced on /metrics. Set by set_active_endpoint().
+        self.active_endpoint: str | None = None
+        self.degraded = degraded.DegradedStateMachine(
+            thresholds=degraded.thresholds_for_link(self.network_profiles, self.active_link)
+        )
         self._status_cb: Callable[[dict[str, Any]], Any] | None = None
         self._last_action = degraded.ACTION_NOMINAL
 
@@ -344,6 +361,22 @@ class LivePipeline:
                 emit_ui_intent=self._push_intent,
             )
 
+        # ---- StrangerProfiler (E36 §3): provisional VLM description of an ---------
+        # unidentified, persistent person → a name-less "? boulanger" hypothesis
+        # (truth_level=inferred), fusionnable into a named entity at enrollment.
+        self.enable_stranger_profiles = enable_stranger_profiles
+        self.stranger_profiler: Any = None
+        if enable_stranger_profiles and self.worldbrain is not None:
+            scfg = self.profile.get("stranger", {}) if isinstance(self.profile, dict) else {}
+            self.stranger_profiler = stranger_profile.StrangerProfiler(
+                vlm=self.vision.vlm,
+                worldbrain=self.worldbrain,
+                config=stranger_profile.StrangerConfig(
+                    stable_seconds=float(scfg.get("stable_seconds", 4.0)),
+                ),
+                on_entity_hot_update=self._push_intent,
+            )
+
         # ---- IntentRouter (E33): voice + menu → one execution path -----------
         # The general router ABSORBS the enrollment_watcher as one of its handlers
         # (identity commands are pre-routed before the general grammar). The LLM
@@ -391,6 +424,44 @@ class LivePipeline:
     # ------------------------------------------------------------- push helpers
     def set_status_sink(self, cb: Callable[[dict[str, Any]], Any]) -> None:
         self._status_cb = cb
+
+    # ------------------------------------------------------ outside access (E36 §1)
+    def set_active_endpoint(self, name: str | None) -> None:
+        """Record which PC endpoint (lan|tunnel|…) this session reached (for /metrics)."""
+        self.active_endpoint = name
+
+    def set_active_link(self, link: str) -> None:
+        """Switch the network degradation profile at runtime (lan ↔ wan).
+
+        The GPU/heartbeat thresholds are link-independent; only the network latency
+        / drop ceilings and the client's target video height follow the link. Called
+        when the resolver picks a tunnel endpoint (→ wan) or the LAN (→ lan)."""
+        self.active_link = str(link or "lan")
+        self.degraded.thresholds = degraded.thresholds_for_link(self.network_profiles, self.active_link)
+
+    def target_video_height(self) -> int:
+        """The video height the client should send on the active link (720 lan / 540 wan)."""
+        p = self.network_profiles.get(self.active_link) or self.network_profiles["lan"]
+        return int(p.target_video_height)
+
+    def resolve_endpoints(self, endpoints: Any = None, *, probe: Any = None) -> dict[str, Any]:
+        """Resolve the ordered PC endpoint list (LAN → tunnel), set active endpoint
+        + link (tunnel endpoints → wan), and return the resolve result.
+
+        ``endpoints`` defaults to the user profile's ``endpoints:`` list. When
+        nothing answers the result is ``pc_unreachable`` and the reflex-only device
+        path stays live (no exception)."""
+        eps = endpoint_resolver.parse_endpoints(
+            endpoints if endpoints is not None else self.user_profile.get("endpoints")
+        )
+        resolver = endpoint_resolver.EndpointResolver(eps, probe=probe)
+        result = resolver.resolve()
+        if result.active is not None:
+            self.set_active_endpoint(result.active.name)
+            # The primary (index 0) endpoint is the LAN; any other → treat as WAN.
+            is_primary = bool(eps) and result.active.name == eps[0].name
+            self.set_active_link("lan" if is_primary else "wan")
+        return result.to_dict()
 
     def _push_intent(self, intent: dict[str, Any]) -> None:
         if self.ingress is not None and hasattr(self.ingress, "send_ui_intent"):
@@ -509,7 +580,61 @@ class LivePipeline:
                 self._run_face_identity(frame_bgr, delta)
             except Exception:
                 pass
+        # StrangerProfiler (E36 §3): a persistent, still-anonymous person track →
+        # one VLM description (name-less hypothesis). Runs after identity so a
+        # freshly-named track is skipped.
+        if delta is not None and self.stranger_profiler is not None:
+            try:
+                self._run_stranger_profiles(frame_bgr, delta)
+            except Exception:
+                pass
         return delta
+
+    def _maybe_fuse_stranger(self, text: str) -> None:
+        """After an enrollment command, fuse the active track's provisional profile
+        into the named entity (E36 §3 — description kept as an attribute)."""
+        if self.stranger_profiler is None or self.enrollment is None:
+            return
+        try:
+            cmd = enrollment_watcher.parse_identity_command(text)
+        except Exception:
+            cmd = None
+        if not cmd or cmd.get("intent") != "enroll":
+            return
+        name = cmd.get("name")
+        if not name:
+            return
+        track_id = getattr(self.enrollment, "_active_track", None)
+        entity_id = getattr(self.enrollment, "_active_entity", None)
+        person_id = enrollment_watcher._person_id_for(name)
+        try:
+            self.stranger_profiler.fuse_into_named(
+                track_id=track_id, entity_id=entity_id, person_id=person_id, name=name,
+            )
+        except Exception:
+            pass
+
+    def _run_stranger_profiles(self, frame_bgr: np.ndarray, delta: dict[str, Any]) -> None:
+        """Feed each visible person track to the StrangerProfiler (E36 §3)."""
+        named_tracks = set(getattr(self.fusion, "_track_identity", {}) if self.fusion is not None else {})
+        for ent in delta.get("entities") or []:
+            if ent.get("label") != "person":
+                continue
+            track_id = str(ent.get("track_id") or "")
+            if not track_id:
+                continue
+            entity_id = self._person_entity_id(track_id)
+            is_named = track_id in named_tracks
+            crop = None
+            if not is_named:
+                bbox = ent.get("bbox")
+                crop = self.vision._crop(frame_bgr, bbox) if bbox else None
+                if crop is not None and getattr(crop, "size", 0) == 0:
+                    crop = None
+            self.stranger_profiler.observe_track(
+                track_id, entity_id=entity_id, is_person=True,
+                is_named=is_named, crop_bgr=crop,
+            )
 
     def _person_entity_id(self, track_id: str) -> str | None:
         """Best-effort WorldBrain entity_id for a person track (if promoted)."""
@@ -595,6 +720,9 @@ class LivePipeline:
                     self.enrollment.on_transcript(text)
                 except Exception:
                     pass
+            # E36 §3: if this transcript was an enrollment, fold any provisional
+            # stranger profile of the active person track into the now-named entity.
+            self._maybe_fuse_stranger(text)
             if self.conversation is not None:
                 try:
                     self.conversation.ingest_segment(
@@ -658,6 +786,11 @@ class LivePipeline:
             "action_level": self._last_action,
             "display": self.display,
             "rotation_corrections": self.rotation_corrections,
+            # E36 §1: which PC endpoint this session reached the PC through and the
+            # active network link (lan|wan) driving the network thresholds.
+            "active_endpoint": self.active_endpoint,
+            "active_link": self.active_link,
+            "target_video_height": self.target_video_height(),
         }
         m.update(self.vision.metrics.snapshot())
         m.update({f"audio_{k}": v for k, v in self.audio.metrics.snapshot().items()})
@@ -709,6 +842,11 @@ class LivePipeline:
             m["discourse_flushes"] = dm.get("flushes", 0)
         if self.morning_briefing is not None:
             m["briefings_enqueued"] = self.morning_briefing.metrics.get("briefings_enqueued", 0)
+        if self.stranger_profiler is not None:
+            spm = self.stranger_profiler.metrics
+            m["stranger_profiles"] = spm.get("profiles_created", 0)
+            m["stranger_vlm_unavailable"] = spm.get("vlm_unavailable", 0)
+            m["stranger_fused"] = spm.get("fused", 0)
         if self.ingress is not None and hasattr(self.ingress, "matcher"):
             try:
                 m["envelope_match"] = self.ingress.matcher.stats()
