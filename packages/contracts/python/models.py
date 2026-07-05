@@ -15,6 +15,11 @@ class FrameEnvelope(StrictModel):
     session_id: str; frame_id: str; capture_monotonic_ns: int; captured_at_utc: str
     pose: Pose; intrinsics: dict[str, Any] | None = None
     rotation: Literal[0,90,180,270] = 0; source: str
+    # E37 §5: a placeholder envelope (gateway._placeholder_envelope, pose 0,0,0) is a
+    # synthetic frame with no real head pose. It must NEVER feed the spatial map /
+    # SceneDelta pose calculations. Real WebRTC frames leave this True; the
+    # placeholder path sets it False and consumers skip its pose.
+    pose_valid: bool = True
 
 class LocalTrack(StrictModel):
     session_id: str; track_id: str; source_frame_id: str; kind: str

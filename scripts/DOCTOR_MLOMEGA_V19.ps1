@@ -143,6 +143,29 @@ except Exception as e:
     elseif ($dbProbe -like "NODB*") { Check-Warn "MLOMEGA_DB absent/non initialise: table delivery non verifiable (normal avant premiere capture)" }
     elseif ($dbProbe -like "TABLE_MISSING*") { Check-Warn "DB presente mais table delivery absente (sera creee par ensure_delivery_schema au premier usage)" }
     else { Check-Warn "Verification table delivery: $dbProbe" }
+
+    # E37 §3: owner (wearer) voice enrolled? The night + live speaker attribution need
+    # an is_user=1 speaker with a voice embedding. WARN (not FAIL) with the command.
+    $ownerProbe = & $Python -c @"
+import os, sqlite3, sys
+db = os.environ.get('MLOMEGA_DB')
+if not db or not os.path.exists(db):
+    print('NODB'); sys.exit(0)
+try:
+    con = sqlite3.connect(db)
+    def has(t):
+        return bool(con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(t,)).fetchone())
+    if not (has('speaker_profiles') and has('voice_embeddings')):
+        print('NO_VOICE_TABLES'); sys.exit(0)
+    row = con.execute("SELECT 1 FROM speaker_profiles sp JOIN voice_embeddings ve ON ve.person_id=sp.person_id WHERE sp.is_user=1 LIMIT 1").fetchone()
+    print('OWNER_OK' if row else 'OWNER_MISSING')
+except Exception as e:
+    print('ERR:'+str(e))
+"@ 2>$null
+    if ($ownerProbe -like "OWNER_OK*") { Check-Ok "Voix du porteur enrolee (is_user=1) - attribution owner active" }
+    elseif ($ownerProbe -like "NODB*" -or $ownerProbe -like "NO_VOICE_TABLES*") { Check-Warn "Voix du porteur non verifiable (DB/voix pas encore initialisee). Dis « configure ma voix » a la premiere session." }
+    elseif ($ownerProbe -like "OWNER_MISSING*") { Check-Warn "Voix du porteur NON enrolee. Dis « configure ma voix » (ou menu -> Ma voix) pour l'attribution owner (nuit + live)." }
+    else { Check-Warn "Verification voix porteur: $ownerProbe" }
   } else { Check-Warn "Table delivery non verifiable sans Python." }
 }
 
@@ -216,14 +239,17 @@ print('BUF_FAIL_GB=' + g('day_buffer_fail_gb', 5))
   }
   $kfBytes = Dir-SizeBytes (Join-Path $evRoot 'keyframes')
   $clipBytes = Dir-SizeBytes (Join-Path $evRoot 'clips')
+  # E37 §1: archived live speech segments (WAV) feeding the nightly deep-audio pass.
+  $audBytes = Dir-SizeBytes (Join-Path $evRoot 'audio')
   $bufBytes = Dir-SizeBytes (Join-Path $evRoot 'day_buffer')
   $kf = if ($kfBytes -lt 0) { 0 } else { $kfBytes }
   $cl = if ($clipBytes -lt 0) { 0 } else { $clipBytes }
+  $au = if ($audBytes -lt 0) { 0 } else { $audBytes }
   $bf = if ($bufBytes -lt 0) { 0 } else { $bufBytes }
-  Check-Ok "evidence/keyframes: $(Fmt-Gb $kfBytes) | clips: $(Fmt-Gb $clipBytes)"
+  Check-Ok "evidence/keyframes: $(Fmt-Gb $kfBytes) | clips: $(Fmt-Gb $clipBytes) | audio: $(Fmt-Gb $audBytes)"
 
   # Total tracked footprint (DB + models + evidence) against warn/fail thresholds.
-  $totalBytes = [long]$dbBytes + [long]([Math]::Max(0, $modelsBytes)) + [long]$kf + [long]$cl + [long]$bf
+  $totalBytes = [long]$dbBytes + [long]([Math]::Max(0, $modelsBytes)) + [long]$kf + [long]$cl + [long]$au + [long]$bf
   $totalGb = $totalBytes / 1GB
   if ($totalGb -ge $failGb) {
     Check-Fail ("Empreinte totale {0:N2} Go >= seuil FAIL {1} Go. Purge conseillee: close-day (tampon-jour) + rotation evidence/clips." -f $totalGb, $failGb)

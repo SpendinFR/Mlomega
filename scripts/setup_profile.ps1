@@ -139,4 +139,9 @@ gpu:
 }
 
 Write-Host "`nProfil V19 configure. Verifie avec: scripts\DOCTOR_MLOMEGA_V19.ps1" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Etape suivante (E37) - attribution owner :" -ForegroundColor Yellow
+Write-Host "  A ta premiere session, dis « configure ma voix » (ou menu -> Ma voix)." -ForegroundColor Yellow
+Write-Host "  Cela enrole ta voix (porteur) : la nuit et le live t'attribuent alors" -ForegroundColor Yellow
+Write-Host "  correctement tes tours de parole (speaker_person_id=owner)." -ForegroundColor Yellow
 exit 0

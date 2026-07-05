@@ -81,6 +81,9 @@ namespace MLOmega.XR.UI.Components
             _actions.Add(App("YouTube", "youtube"));
             // Memory (a voice question is prompted by the app; the menu just opens it).
             _actions.Add(new MenuAction("Mémoire", new DeviceCommand { Type = "device_command", Action = "ask_memory_prompt" }));
+            // Owner voice setup (E37 §3): arms the wearer-voice enrolment, exactly like
+            // saying "configure ma voix" — the single execution path (owner_enroll intent).
+            _actions.Add(new MenuAction("Ma voix", new DeviceCommand { Type = "device_command", Action = "owner_enroll" }));
             // Replay + virtual screen.
             _actions.Add(new MenuAction("Replay", new DeviceCommand { Type = "device_command", Action = "replay" }));
             _actions.Add(new MenuAction("Écran virtuel", new DeviceCommand { Type = "device_command", Action = "virtual_screen" }));

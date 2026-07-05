@@ -20,7 +20,7 @@ honest ``status`` on the subtitle intent, never an exception into the transport.
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable
 
 import numpy as np
@@ -250,6 +250,7 @@ class AudioRT:
         translator: ArgosTranslator | None = None,
         arbiter: Any = None,
         on_intent: Callable[[dict[str, Any]], Any] | None = None,
+        on_segment: Callable[[np.ndarray, dict[str, Any]], Any] | None = None,
     ) -> None:
         self.session_id = session_id
         self.target_language = target_language
@@ -258,6 +259,11 @@ class AudioRT:
         self.translator = translator or ArgosTranslator()
         self.arbiter = arbiter
         self.on_intent = on_intent
+        # E37 §1: raw-segment hook. Fires with (segment float32 16 kHz mono, meta)
+        # for every FINAL speech segment — the audio archive (night) and E32 voice
+        # matching consume it. It runs AFTER subtitles are emitted and its failures
+        # are swallowed, so it never disturbs the reflex subtitle path.
+        self.on_segment = on_segment
         self.metrics = AudioMetrics()
         self._seq = 0
 
@@ -353,4 +359,23 @@ class AudioRT:
         self.metrics.finals += 1
         self._emit(final)
         out.append(final)
+        # E37 §1: hand the raw FINAL segment to the archive / voice matcher AFTER the
+        # subtitle is out. Duration derives from the sample count (16 kHz mono); the
+        # window ends "now" (finalisation time). Never blocks / raises the reflex path.
+        if self.on_segment is not None:
+            try:
+                dur_s = float(len(seg)) / 16000.0
+                end = datetime.now(timezone.utc)
+                start = end - timedelta(seconds=dur_s)
+                self.on_segment(seg, {
+                    "ui_intent_id": final.get("ui_intent_id"),
+                    "text": text,
+                    "language": language,
+                    "absolute_start": start.isoformat(),
+                    "absolute_end": end.isoformat(),
+                    "duration_s": dur_s,
+                    "sample_rate": 16000,
+                })
+            except Exception:
+                pass
         return out

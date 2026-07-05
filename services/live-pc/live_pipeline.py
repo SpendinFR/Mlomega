@@ -69,6 +69,8 @@ tts_local = _load_sibling("v19_tts_local", "tts_local.py")
 replay_service_mod = _load_sibling("v19_replay_service", "replay_service.py")
 endpoint_resolver = _load_sibling("v19_endpoint_resolver", "endpoint_resolver.py")
 stranger_profile = _load_sibling("v19_stranger_profile", "stranger_profile.py")
+audio_archive = _load_sibling("v19_audio_archive", "audio_archive.py")
+owner_setup = _load_sibling("v19_owner_setup", "owner_setup.py")
 
 
 def load_profile(profile_path: Path | str | None = None) -> dict[str, Any]:
@@ -171,6 +173,7 @@ class LivePipeline:
         enable_tts: bool = False,
         enable_replay: bool = False,
         enable_stranger_profiles: bool = False,
+        enable_audio_archive: bool = False,
         active_link: str = "lan",
     ) -> None:
         self.session_id = session_id
@@ -229,6 +232,7 @@ class LivePipeline:
             target_language=str((acfg.get("asr", {}) or {}).get("target_language", "fr")),
             arbiter=arbiter,
             on_intent=self._push_intent,
+            on_segment=self._on_audio_segment,
         )
         # E36 §1: distinct lan/wan network thresholds. Outside-the-home the link is a
         # VPN tunnel over 4G/5G — a higher latency ceiling + a lower target video
@@ -404,6 +408,19 @@ class LivePipeline:
                 db_path=self.db_path, emit_ui_intent=self._push_intent,
             )
 
+        # ---- OwnerSetup (E37 §3): enrol the WEARER's voice → owner attribution ----
+        # « configure ma voix » captures the next N wearer segments and enrols them
+        # as is_user=True in the SHARED core gallery, so both the night and the E32
+        # live matcher recognise the porteur (→ speaker_person_id=owner).
+        self.owner_setup: Any = None
+        if enable_identity:
+            self.owner_setup = owner_setup.OwnerSetup(
+                voice_identity=self.voice_identity,
+                config=owner_setup.OwnerSetupConfig(person_id=self.person_id),
+                emit_ui_intent=self._push_intent,
+                db_path=db_path,
+            )
+
         if enable_intents:
             self.llm_router = llm_providers.LLMRouter(
                 profile=self.user_profile,
@@ -418,8 +435,38 @@ class LivePipeline:
                 enrollment=self.enrollment,
                 emit_ui_intent=self._push_intent,
                 replay_service=self.replay,
+                owner_setup=self.owner_setup,
                 person_id=self.person_id,
             )
+
+        # ---- AudioArchive (E37 §1): live VAD segments → WAV + night speech_segment --
+        # Rebuilds the nightly deep-audio input for V19 sessions. Bound + never on the
+        # subtitle path. Uses the ConversationBridge's shared live_session_id so the
+        # archived audio and the transcript turns land in the same BrainLive session.
+        self.enable_audio_archive = enable_audio_archive
+        self.audio_archive: Any = None
+        # Segment WAV clips keyed by the final subtitle's ui_intent_id, produced by
+        # _on_audio_segment and consumed by on_audio_chunk for E32 voice matching.
+        self._segment_clips: dict[str, str] = {}
+        if enable_audio_archive:
+            self.audio_archive = audio_archive.AudioArchive(
+                person_id=self.person_id,
+                live_session_id=self._archive_session_id(),
+                db_path=db_path,
+            )
+
+    def _archive_session_id(self) -> str:
+        """The BrainLive session id to attach archived audio to.
+
+        Prefer the ConversationBridge's shared live_session_id (same session the
+        transcript turns use, so the night assembler folds audio + turns together);
+        fall back to the transport session_id when no bridge is wired."""
+        if self.conversation is not None:
+            try:
+                return self.conversation.ensure_session()
+            except Exception:
+                pass
+        return self.session_id
 
     # ------------------------------------------------------------- push helpers
     def set_status_sink(self, cb: Callable[[dict[str, Any]], Any]) -> None:
@@ -563,7 +610,10 @@ class LivePipeline:
                 frame_bgr = deorient_frame(frame_bgr, rot)
                 self.rotation_corrections += 1
         # Feed the spatial provider a pose keyframe (E28) before vision runs.
-        if self.spatial is not None:
+        # E37 §5: a placeholder envelope (gateway._placeholder_envelope) carries a
+        # synthetic neutral pose (0,0,0) flagged pose_valid=False. Never feed it to
+        # the spatial map — a fake (0,0,0) would pollute the zone cloud and bearings.
+        if self.spatial is not None and bool(getattr(envelope, "pose_valid", True)):
             pose = getattr(envelope, "pose", None)
             if pose is not None:
                 try:
@@ -668,6 +718,54 @@ class LivePipeline:
                 self.enrollment.set_active_track(track_id, entity_id, crop)
             self.fusion.resolve(entity_id=entity_id, track_id=track_id, face=face_res)
 
+    def _on_audio_segment(self, seg: np.ndarray, meta: dict[str, Any]) -> None:
+        """Handle one FINAL raw VAD segment (E37 §1/§3), off the subtitle path.
+
+        Fired by AudioRT AFTER the subtitle intent is emitted. It (1) writes a WAV
+        clip for E32 voice matching + owner capture, (2) archives the segment for the
+        nightly deep-audio pass (bounded), and (3) feeds an armed owner enrolment.
+        Everything here is best-effort and swallows its own errors — the reflex
+        subtitle path already returned before this runs."""
+        uiid = meta.get("ui_intent_id")
+        abs_start = meta.get("absolute_start")
+        abs_end = meta.get("absolute_end")
+
+        # (1) Persist a WAV clip so E32 voice matching / owner capture have a file.
+        wav_clip: str | None = None
+        if self.voice_identity is not None or self.owner_setup is not None or self.audio_archive is not None:
+            try:
+                import tempfile
+                fd = tempfile.NamedTemporaryFile(prefix="seg_", suffix=".wav", delete=False)
+                fd.close()
+                audio_archive.write_segment_wav(fd.name, seg, sample_rate=int(meta.get("sample_rate", 16000)))
+                wav_clip = fd.name
+            except Exception:
+                wav_clip = None
+        if uiid and wav_clip:
+            # Picked up in on_audio_chunk's intent loop for voice matching (E32).
+            self._segment_clips[str(uiid)] = wav_clip
+
+        # (2) Archive the segment for the night (bounded, non-blocking).
+        if self.audio_archive is not None:
+            try:
+                self.audio_archive.archive_segment(
+                    seg,
+                    absolute_start=abs_start,
+                    absolute_end=abs_end,
+                    source_event_id=str(uiid) if uiid else None,
+                    transcript_text=meta.get("text"),
+                )
+            except Exception:
+                pass
+
+        # (3) Owner enrolment (E37 §3): while armed, the wearer's next segments enrol
+        # their voice as is_user=True. Runs on the clip we just wrote.
+        if self.owner_setup is not None and wav_clip:
+            try:
+                self.owner_setup.offer_segment(wav_clip)
+            except Exception:
+                pass
+
     def on_audio_chunk(self, samples: np.ndarray, src_rate: int) -> list[dict[str, Any]]:
         intents = self.audio.push_audio(samples, src_rate)
         # Feed final transcripts two ways: (1) as scene conversation context for
@@ -695,6 +793,9 @@ class LivePipeline:
             # bridge turn (speaker_person_id / speaker_label) when a wav clip is
             # available on the intent.
             wav_path = content.get("audio_path") or content.get("wav_path")
+            if not wav_path:
+                # E37 §1: the WAV clip written by _on_audio_segment for this final.
+                wav_path = self._segment_clips.pop(str(it.get("ui_intent_id") or ""), None)
             if self.voice_identity is not None and wav_path:
                 try:
                     if self.enrollment is not None:
@@ -702,6 +803,8 @@ class LivePipeline:
                     vres = self.voice_identity.match(wav_path)
                     if vres.get("matched") and self.fusion is not None:
                         self.fusion.resolve(track_id=None, voice=vres)
+                        # E37 §3: the wearer (owner) enrolled is_user=True is matched
+                        # here → speaker_person_id=owner on this turn.
                         content["speaker_person_id"] = vres.get("person_id")
                         content["speaker_label"] = vres.get("name")
                 except Exception:
@@ -731,6 +834,7 @@ class LivePipeline:
                         is_final=True,
                         event_id=it.get("ui_intent_id"),
                         speaker_label=content.get("speaker_label"),
+                        speaker_person_id=content.get("speaker_person_id"),
                     )
                 except Exception:
                     pass

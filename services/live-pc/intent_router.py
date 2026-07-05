@@ -96,6 +96,12 @@ def _build_rules() -> list[tuple[re.Pattern[str], str, dict[str, Any]]]:
     add(r"\b(?:r[ée]ponds?\s+[àa]\s+voix\s+haute|parle|lis\s+[àa]\s+voix\s+haute|voix\s+haute|active\s+la\s+voix|speak\s+(?:out\s+)?loud|read\s+aloud|voice\s+on)\b", "set_tts", tts=True)
     add(r"\b(?:tais[- ]toi|silence|mode\s+silencieux|coupe\s+la\s+voix|d[ée]sactive\s+la\s+voix|mute|voice\s+off|be\s+quiet)\b", "set_tts", tts=False)
 
+    # --- owner voice setup (E37 §3) ---
+    add(r"\b(?:configure|enregistre|apprends|m[ée]morise)\s+ma\s+voix\b", "owner_enroll")
+    add(r"\bc'?est\s+moi\s+qui\s+parle\b", "owner_enroll")
+    add(r"\b(?:set\s*up|record|learn)\s+my\s+voice\b", "owner_enroll")
+    add(r"\bit'?s\s+me\s+(?:speaking|talking)\b", "owner_enroll")
+
     # --- memory ---
     add(r"\b(?:interroge\s+ma\s+m[ée]moire|demande\s+[àa]\s+ma\s+m[ée]moire|ask\s+my\s+memory)\b\s*[:,]?\s*(.*)", "ask_memory")
     add(r"\b(?:rappelle[- ]moi|remind\s+me)\b\s*(.*)", "ask_memory")
@@ -141,6 +147,9 @@ _HIGH_CONFIDENCE: list[tuple[re.Pattern[str], str]] = [
         (r"mode\s+local\b", "local_mode"),
         (r"local\s+mode\b", "local_mode"),
         (r"mode\s+gratuit\b", "local_mode"),
+        (r"configure\s+ma\s+voix\b", "owner_enroll"),
+        (r"c'?est\s+moi\s+qui\s+parle\b", "owner_enroll"),
+        (r"set\s*up\s+my\s+voice\b", "owner_enroll"),
     ]
 ]
 
@@ -234,6 +243,7 @@ class IntentRouter:
         enrollment: Any = None,
         emit_ui_intent: Callable[[dict[str, Any]], Any] | None = None,
         replay_service: Any = None,
+        owner_setup: Any = None,
         person_id: str = "me",
     ) -> None:
         self.vision_focus = vision_focus
@@ -241,6 +251,8 @@ class IntentRouter:
         self.ask_memory = ask_memory
         self.llm_router = llm_router
         self.enrollment = enrollment
+        # E37 §3: owner voice enrolment ("configure ma voix"). Arms the wearer capture.
+        self.owner_setup = owner_setup
         self._emit = emit_ui_intent
         # E35: when a ReplayService is wired, ``replay`` assembles a real bundle
         # (keyframes/clips/events/transcript) → virtual_screen + timeline, instead
@@ -403,7 +415,7 @@ class IntentRouter:
             return None
         schema = {
             "intent": "one of: what_is|find|ocr|translate|zoom|set_ui_mode|privacy_pause|"
-                      "open_app|paid_mode|local_mode|menu|replay|ask_memory|unknown",
+                      "open_app|paid_mode|local_mode|menu|replay|ask_memory|owner_enroll|unknown",
             "query": "string (target for find, or search text for open_app youtube)",
             "ui_mode": "hide_all|minimal|normal|freeguy",
             "app": "maps|youtube|package",
@@ -423,7 +435,9 @@ class IntentRouter:
             "{\"intent\":\"what_is\"} ; « emmène-moi à la gare » -> "
             "{\"intent\":\"open_app\",\"app\":\"maps\",\"destination\":\"la gare\"} ; "
             "« qu'est-ce que j'avais promis à Sarah déjà ? » -> "
-            "{\"intent\":\"ask_memory\",\"question\":\"qu'est-ce que j'avais promis à Sarah\"}. "
+            "{\"intent\":\"ask_memory\",\"question\":\"qu'est-ce que j'avais promis à Sarah\"} ; "
+            "« configure ma voix » / « c'est moi qui parle » -> "
+            "{\"intent\":\"owner_enroll\"}. "
             "Si aucun intent ne correspond, intent=unknown."
         )
         try:
@@ -468,7 +482,19 @@ class IntentRouter:
         if intent == "set_tts":
             on = routed.get("tts")
             return self._do_device({"type": "device_command", "action": "set_tts", "tts": bool(on)}, intent)
+        if intent == "owner_enroll":
+            return self._do_owner_enroll()
         return self._unknown(text)
+
+    def _do_owner_enroll(self) -> RoutedIntent:
+        """E37 §3: arm the wearer's voice-enrolment capture window."""
+        if self.owner_setup is None:
+            return self._unavailable("owner_enroll", "Configuration de la voix indisponible sur ce profil.")
+        try:
+            res = self.owner_setup.begin()
+        except Exception:
+            return self._unavailable("owner_enroll", "Impossible de démarrer la configuration de ta voix.")
+        return RoutedIntent(intent="owner_enroll", result=res, handled=True)
 
     def _do_vision(self, routed: dict[str, Any], text: str) -> RoutedIntent:
         intent = routed["intent"]
