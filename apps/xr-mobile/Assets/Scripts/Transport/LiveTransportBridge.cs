@@ -56,6 +56,11 @@ namespace MLOmega.XR.Transport
         /// <summary>Raised on the main thread for each UIIntent received downlink.</summary>
         public event Action<UIIntent> UiIntentReceived;
 
+        /// <summary>Raised on the main thread with the raw downlink JSON before typed
+        /// parsing — lets the DeviceCommandHandler (E33 §4) claim `device_command`
+        /// messages, which are NOT UIIntents.</summary>
+        public event Action<string> MessageReceived;
+
         /// <summary>Raised on the main thread with a raw stats JSON snapshot.</summary>
         public event Action<string> StatsReceived;
 
@@ -231,6 +236,13 @@ namespace MLOmega.XR.Transport
         {
             Enqueue(() =>
             {
+                // Raw hook first: device_command messages (E33 §4) are claimed here
+                // and must NOT be parsed as UIIntents.
+                MessageReceived?.Invoke(json);
+                if (json != null && json.IndexOf("\"device_command\"", StringComparison.Ordinal) >= 0)
+                {
+                    return;
+                }
                 try
                 {
                     var intent = JsonConvert.DeserializeObject<UIIntent>(json);
