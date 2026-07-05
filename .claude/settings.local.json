@@ -232,7 +232,12 @@
       "Bash(python -m pytest tests/v19/test_e36_ops.py -q)",
       "Bash(xxd)",
       "PowerShell(& powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\wabad\\\\Downloads\\\\FABLE\\\\scripts\\\\DOCTOR_MLOMEGA_V19.ps1\" -Quota 2>&1 | Select-String \"Stockage|DB SQLite|models|evidence|Tampon|Empreinte|FAIL|OK\\\\\\)\")",
-      "Bash(python -c \"import ast; [ast.parse\\(open\\(f,encoding='utf-8'\\).read\\(\\)\\) for f in ['services/live-pc/live_pipeline.py','services/live-pc/endpoint_resolver.py','services/live-pc/stranger_profile.py','services/live-pc/degraded.py','services/live-pc/sessionhub_http.py','simulators/fake_xr_device.py']]; print\\('syntax OK'\\)\")"
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f,encoding='utf-8'\\).read\\(\\)\\) for f in ['services/live-pc/live_pipeline.py','services/live-pc/endpoint_resolver.py','services/live-pc/stranger_profile.py','services/live-pc/degraded.py','services/live-pc/sessionhub_http.py','simulators/fake_xr_device.py']]; print\\('syntax OK'\\)\")",
+      "PowerShell(git checkout -b feat/v19-e37-nightly-owner origin/main 2>&1)",
+      "PowerShell(git status --short | Select-Object -First 8; git log --oneline -2; $ffdir = Get-ChildItem \"$env:LOCALAPPDATA\\\\Microsoft\\\\WinGet\\\\Packages\" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName; $env:Path = \"$ffdir;$env:Path\"; python -m pytest tests/v19/test_e37_nightly.py -q 2>&1 | Select-Object -Last 5)",
+      "PowerShell($ffdir = Get-ChildItem \"$env:LOCALAPPDATA\\\\Microsoft\\\\WinGet\\\\Packages\" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName; $env:Path = \"$ffdir;$env:Path\"; python -m pytest tests/v19 -q 2>&1 | Select-Object -Last 3)",
+      "PowerShell(git checkout -b feat/v19-e38-fine-intel origin/main 2>&1)",
+      "Bash(git commit -q -m 'feat\\(v19-e38\\): hypothesis_engine + attribute_memory + routine_associations + wiring *)"
     ]
   }
 }
