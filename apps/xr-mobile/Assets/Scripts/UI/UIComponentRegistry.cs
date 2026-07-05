@@ -27,6 +27,7 @@ namespace MLOmega.XR.UI
                 { "taskcard", typeof(TaskCard) },
                 { "virtualscreen", typeof(VirtualScreen) },
                 { "correctionchip", typeof(CorrectionChip) },
+                { "menupanel", typeof(MenuPanel) },
             };
 
         // A few common aliases -> canonical key (translation is a subtitle surface).
@@ -42,6 +43,7 @@ namespace MLOmega.XR.UI
                 { "task", "taskcard" },
                 { "screen", "virtualscreen" },
                 { "correction", "correctionchip" },
+                { "menu", "menupanel" },
             };
 
         /// <summary>Normalise a contract component string to a canonical key, or null if unknown.</summary>

@@ -48,10 +48,94 @@ namespace MLOmega.XR.UI
         public bool IsStatus => Priority == RenderPriority.StatusPrivacy;
     }
 
+    /// <summary>
+    /// Named UI density modes (§13.2, E33 voice/menu toggles). The mode gates which
+    /// non-status intents the broker admits/keeps:
+    ///   * <see cref="Normal"/> — everything, capped by the config density cap.
+    ///   * <see cref="Minimal"/> — only high-priority rungs (Privacy..Reflex),
+    ///     conversational/ambient cards suppressed.
+    ///   * <see cref="HideAll"/> — nothing except StatusBar/Privacy (§13.2-1): the
+    ///     head-locked StatusBar is a standalone surface and privacy intents are the
+    ///     only admitted rung.
+    ///   * <see cref="FreeGuy"/> — playful/normal density; alias of Normal for the
+    ///     broker (the visual theme differs, handled by the renderer).
+    /// </summary>
+    public enum UIDensityMode
+    {
+        Normal = 0,
+        Minimal = 1,
+        HideAll = 2,
+        FreeGuy = 3
+    }
+
     public sealed class UIIntentBroker : MonoBehaviour
     {
         [SerializeField] private SceneCache _sceneCache;
         [SerializeField] private SceneCacheConfig _config;
+
+        /// <summary>Current density mode (voice/menu "cache tout" / "mode Free Guy" / …).</summary>
+        public UIDensityMode Density { get; private set; } = UIDensityMode.Normal;
+
+        /// <summary>Raised when the density mode changes (for the StatusBar / receipts).</summary>
+        public event Action<UIDensityMode> DensityChanged;
+
+        /// <summary>
+        /// Set the named density mode. In <see cref="UIDensityMode.HideAll"/> every
+        /// currently-admitted non-status intent is dropped immediately (only the
+        /// standalone StatusBar and any privacy intent survive, §13.2-1); switching
+        /// to a looser mode simply lets future intents back in.
+        /// </summary>
+        public void SetDensity(UIDensityMode mode)
+        {
+            if (Density == mode) return;
+            Density = mode;
+            if (mode == UIDensityMode.HideAll || mode == UIDensityMode.Minimal)
+            {
+                List<ActiveIntent> drop = null;
+                foreach (ActiveIntent ai in _active.Values)
+                {
+                    if (ai.IsStatus || ai.Fading) continue;
+                    if (!AllowedUnderDensity(ai.Priority))
+                    {
+                        (drop ??= new List<ActiveIntent>()).Add(ai);
+                    }
+                }
+                if (drop != null)
+                {
+                    foreach (ActiveIntent ai in drop) RemoveNow(ai, UIIntentDropReason.DensityCap);
+                }
+            }
+            DensityChanged?.Invoke(mode);
+        }
+
+        /// <summary>Map a named string ("hide_all"/"minimal"/"normal"/"freeguy") to the mode.</summary>
+        public static UIDensityMode ParseDensity(string name)
+        {
+            switch ((name ?? string.Empty).Trim().ToLowerInvariant().Replace("_", "").Replace(" ", ""))
+            {
+                case "hideall": return UIDensityMode.HideAll;
+                case "minimal": return UIDensityMode.Minimal;
+                case "freeguy": return UIDensityMode.FreeGuy;
+                default: return UIDensityMode.Normal;
+            }
+        }
+
+        /// <summary>Whether a priority rung is admitted under the current density mode.</summary>
+        private bool AllowedUnderDensity(RenderPriority prio)
+        {
+            switch (Density)
+            {
+                case UIDensityMode.HideAll:
+                    // Only Privacy (rung 1) survives; StatusPrivacy is never counted here.
+                    return prio == RenderPriority.StatusPrivacy;
+                case UIDensityMode.Minimal:
+                    // Keep the safety/focus/subtitle/requested rungs (1-4); drop
+                    // ambient task/conversational/decorative (5-7).
+                    return (int)prio <= (int)RenderPriority.VisionRtRequested;
+                default:
+                    return true;
+            }
+        }
 
         // ui_intent_id -> active intent.
         private readonly Dictionary<string, ActiveIntent> _active = new Dictionary<string, ActiveIntent>();
@@ -183,6 +267,16 @@ namespace MLOmega.XR.UI
             }
 
             RenderPriority prio = UIIntentPriority.Classify(intent);
+
+            // Named density mode (voice/menu "cache tout"/"minimal"): refuse intents
+            // whose rung the current mode suppresses. StatusBar is standalone (not
+            // admitted here) so "hide_all" leaves only StatusBar + privacy (§13.2-1).
+            if (!AllowedUnderDensity(prio))
+            {
+                Journal(id, UIIntentDropReason.DensityCap, intent.Producer);
+                return;
+            }
+
             var candidate = new ActiveIntent(intent, prio, nowMs, ResolveSource(intent));
 
             // Density cap: status/privacy is never counted nor capped.
