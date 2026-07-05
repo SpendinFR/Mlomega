@@ -134,6 +134,7 @@ class ConversationBridge:
         timestamp_end: str | None = None,
         duration_s: float | None = None,
         speaker_label: str | None = None,
+        speaker_person_id: str | None = None,
         event_id: str | None = None,
         asr_confidence: float = 0.0,
         run_hot_cycle: bool | None = None,
@@ -180,7 +181,9 @@ class ConversationBridge:
                 session_id,
                 text,
                 speaker_label=speaker_label or self.speaker_label,
-                speaker_person_id=None,  # identity resolved in E32
+                # E32/E37: identity resolved live (voice match, incl. the owner enrolled
+                # is_user=True); None until a match sets it.
+                speaker_person_id=speaker_person_id,
                 is_final=True,
                 timestamp_start=_iso(start_dt),
                 timestamp_end=_iso(end_dt),

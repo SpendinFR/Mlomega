@@ -216,6 +216,10 @@ def _placeholder_envelope(session_id: str, frame_id: str, capture_ns: int, sourc
         pose=Pose(position=[0.0, 0.0, 0.0], rotation=[0.0, 0.0, 0.0, 1.0]),
         rotation=0,
         source=source,
+        # E37 §5: this is a synthetic neutral pose (no real head tracking on this
+        # frame). Mark it so spatial / SceneDelta never treat (0,0,0) as an observed
+        # camera pose and pollute the zone cloud / bearings.
+        pose_valid=False,
     )
 
 
