@@ -229,6 +229,7 @@ class IntentRouter:
         llm_router: Any = None,
         enrollment: Any = None,
         emit_ui_intent: Callable[[dict[str, Any]], Any] | None = None,
+        replay_service: Any = None,
         person_id: str = "me",
     ) -> None:
         self.vision_focus = vision_focus
@@ -237,6 +238,11 @@ class IntentRouter:
         self.llm_router = llm_router
         self.enrollment = enrollment
         self._emit = emit_ui_intent
+        # E35: when a ReplayService is wired, ``replay`` assembles a real bundle
+        # (keyframes/clips/events/transcript) → virtual_screen + timeline, instead
+        # of a bare ``replay`` device_command. Falls back to the device_command
+        # path (the phone's own replay UI) when no service is injected.
+        self.replay_service = replay_service
         self.person_id = person_id
         self.context = IntentContext()
         self.metrics: dict[str, Any] = {
@@ -454,7 +460,7 @@ class IntentRouter:
         if intent == "ask_memory":
             return self._do_ask_memory(routed)
         if intent == "replay":
-            return self._do_device({"type": "device_command", "action": "replay", "time": routed.get("time")}, intent)
+            return self._do_replay(routed)
         return self._unknown(text)
 
     def _do_vision(self, routed: dict[str, Any], text: str) -> RoutedIntent:
@@ -498,6 +504,22 @@ class IntentRouter:
             if routed.get(k):
                 cmd[k] = routed[k]
         return self._do_device(cmd, "open_app")
+
+    def _do_replay(self, routed: dict[str, Any]) -> RoutedIntent:
+        time = routed.get("time")
+        # E35: a real ReplayService assembles the bundle + emits virtual_screen +
+        # timeline. Its ``emit_ui_intent`` is the same DataChannel push as ours.
+        if self.replay_service is not None:
+            try:
+                res = self.replay_service.replay(time=time)
+            except Exception:
+                res = None
+            if res is not None:
+                self.context.note(intent="replay")
+                return RoutedIntent(intent="replay", replay=res, handled=True,
+                                    device_command={"type": "device_command", "action": "replay", "time": time})
+        # No service wired → the phone's own replay UI via the device_command path.
+        return self._do_device({"type": "device_command", "action": "replay", "time": time}, "replay")
 
     def _do_paid_mode(self, routed: dict[str, Any]) -> RoutedIntent:
         if self.llm_router is None:
