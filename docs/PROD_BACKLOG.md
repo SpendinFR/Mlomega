@@ -35,7 +35,9 @@ Issu de l'audit d'alignement vision↔livré du 2026-07-04. Principe directeur :
 
 ## E36 — Ops de prod
 
-**Faire** : accès hors-maison (Tailscale/WireGuard documenté + testé : le live contextuel dehors passe par le VPN, latence mesurée, politique dégradée explicite sinon) ; **backup automatique chiffré** de la mémoire (SQLite + médias evidence → destination configurable, planifié, testé en restauration) ; quotas stockage surveillés par doctor ; profil temporaire d'inconnu via VLM (description apparence → entité provisoire non nommée, fusionnable à l'enrollment).
+**Faire** : accès hors-maison (Tailscale/WireGuard documenté + testé : le live contextuel dehors passe par le VPN, latence mesurée, politique dégradée explicite sinon) ; ~~**backup automatique chiffré** de la mémoire (SQLite + médias evidence → destination configurable, planifié, testé en restauration)~~ **DIFFÉRÉ (décision utilisateur 2026-07-05 — usage perso, géré manuellement)** ; quotas stockage surveillés par doctor ; profil temporaire d'inconnu via VLM (description apparence → entité provisoire non nommée, fusionnable à l'enrollment).
+
+**Priorité utilisateur (2026-07-05)** : l'usage principal est DEHORS (téléphone en 4G/5G, PC à la maison derrière NAT) → l'accès hors-maison est **LE** livrable. Le backup chiffré est reporté (géré à la main).
 
 ## Puis : les deux finals
 

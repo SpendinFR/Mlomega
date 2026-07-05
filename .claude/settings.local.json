@@ -228,7 +228,11 @@
       "Bash(python -c 'import sys; sys.path.insert\\(0,'\\\\''services/live-pc'\\\\''\\); sys.path.insert\\(0,'\\\\''src'\\\\''\\); import importlib.util *)",
       "Bash(python -m pytest tests/v19/test_e33_intents.py tests/v19/test_e34_proactivity.py tests/v19/test_e32_identity.py -q)",
       "Bash(python -m pytest tests/v19/test_e35_outputs.py -q)",
-      "PowerShell(git checkout -b feat/v19-e36-ops origin/main 2>&1)"
+      "PowerShell(git checkout -b feat/v19-e36-ops origin/main 2>&1)",
+      "Bash(python -m pytest tests/v19/test_e36_ops.py -q)",
+      "Bash(xxd)",
+      "PowerShell(& powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\\\Users\\\\wabad\\\\Downloads\\\\FABLE\\\\scripts\\\\DOCTOR_MLOMEGA_V19.ps1\" -Quota 2>&1 | Select-String \"Stockage|DB SQLite|models|evidence|Tampon|Empreinte|FAIL|OK\\\\\\)\")",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f,encoding='utf-8'\\).read\\(\\)\\) for f in ['services/live-pc/live_pipeline.py','services/live-pc/endpoint_resolver.py','services/live-pc/stranger_profile.py','services/live-pc/degraded.py','services/live-pc/sessionhub_http.py','simulators/fake_xr_device.py']]; print\\('syntax OK'\\)\")"
     ]
   }
 }

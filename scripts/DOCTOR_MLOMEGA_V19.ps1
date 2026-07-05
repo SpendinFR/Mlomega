@@ -9,6 +9,7 @@ WARN never fails the run. Flags select subsets:
   -Xr        : XR readiness (WARN "non testable sans lunettes" — never a fake OK)
   -Vision    : GPU/detector readiness
   -Delivery  : delivery queue table accessible
+  -Quota     : storage footprint (DB / models / evidence / day-buffer) vs profile thresholds
 
 With no flags, the base checks always run (Python, .venv-live, contracts,
 GPU probe, Qdrant, Ollama, profile).
@@ -17,7 +18,7 @@ PowerShell 5.1 compatible: no '&&', no ternary operators.
 #>
 [CmdletBinding()]
 param(
-  [switch]$Full, [switch]$Memory, [switch]$Xr, [switch]$Vision, [switch]$World, [switch]$Delivery
+  [switch]$Full, [switch]$Memory, [switch]$Xr, [switch]$Vision, [switch]$World, [switch]$Delivery, [switch]$Quota
 )
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -36,6 +37,7 @@ $doVision  = $Full -or $Vision
 $doMemory  = $Full -or $Memory -or $Delivery
 $doDelivery = $Full -or $Delivery -or $Memory
 $doXr      = $Full -or $Xr
+$doQuota   = $Full -or $Quota
 
 # Resolve the python interpreter: prefer .venv-live, else .venv, else PATH.
 $LivePython = Join-Path $ProjectRoot ".venv-live\Scripts\python.exe"
@@ -148,6 +150,99 @@ except Exception as e:
 if ($doXr) {
   Section "XR"
   Check-Warn "XR non testable sans lunettes (XREAL/S25 requis; gate G1 = Lot 3). Utilise le mode -SimOnly / phone_only."
+}
+
+# --- Storage quotas subset (E36 §2) ---
+if ($doQuota) {
+  Section "Stockage / quotas"
+
+  # Thresholds are configurable in the user profile (storage_quota block); the
+  # defaults are conservative for a personal RTX-3070 box.
+  $warnGb = 8.0
+  $failGb = 20.0
+  $bufWarnGb = 2.0
+  $bufFailGb = 5.0
+  if ($Python -and (Test-Path $profilePath)) {
+    $q = & $Python -c @"
+import sys, yaml
+d = yaml.safe_load(open(r'$profilePath', encoding='utf-8')) or {}
+sq = (d.get('storage_quota') or {}) if isinstance(d, dict) else {}
+def g(k, dflt):
+    v = sq.get(k)
+    return str(v) if v is not None else str(dflt)
+print('WARN_GB=' + g('warn_gb', 8))
+print('FAIL_GB=' + g('fail_gb', 20))
+print('BUF_WARN_GB=' + g('day_buffer_warn_gb', 2))
+print('BUF_FAIL_GB=' + g('day_buffer_fail_gb', 5))
+"@ 2>$null
+    foreach ($line in $q) {
+      if ($line -like 'WARN_GB=*')     { $warnGb = [double]($line -replace 'WARN_GB=','') }
+      elseif ($line -like 'FAIL_GB=*') { $failGb = [double]($line -replace 'FAIL_GB=','') }
+      elseif ($line -like 'BUF_WARN_GB=*') { $bufWarnGb = [double]($line -replace 'BUF_WARN_GB=','') }
+      elseif ($line -like 'BUF_FAIL_GB=*') { $bufFailGb = [double]($line -replace 'BUF_FAIL_GB=','') }
+    }
+  }
+
+  function Dir-SizeBytes([string]$path) {
+    if (-not (Test-Path $path)) { return -1 }
+    $sum = (Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+    if ($null -eq $sum) { return 0 }
+    return [long]$sum
+  }
+  function Fmt-Gb([long]$b) { if ($b -lt 0) { return 'absent' } return ('{0:N2} Go' -f ($b / 1GB)) }
+
+  # DB size (MLOMEGA_DB, else the default core memory.db location).
+  $dbPath = $env:MLOMEGA_DB
+  if (-not $dbPath) { $dbPath = Join-Path $ProjectRoot 'data\memory.db' }
+  if (Test-Path $dbPath) {
+    $dbBytes = (Get-Item -LiteralPath $dbPath).Length
+    Check-Ok "DB SQLite: $(Fmt-Gb $dbBytes) ($dbPath)"
+  } else {
+    Check-Warn "DB SQLite absente ($dbPath) - normal avant la premiere capture."
+    $dbBytes = 0
+  }
+
+  # models/ - pinned ONNX weights (should be stable, informational).
+  $modelsBytes = Dir-SizeBytes (Join-Path $ProjectRoot 'models')
+  if ($modelsBytes -ge 0) { Check-Ok "models/: $(Fmt-Gb $modelsBytes)" }
+  else { Check-Warn "models/ absent (lance scripts\fetch_models_v19.py)" }
+
+  # evidence root (keyframes + clips). MLOMEGA_RAW/evidence, else data\evidence.
+  $evRoot = $env:MLOMEGA_EVIDENCE
+  if (-not $evRoot) {
+    if ($env:MLOMEGA_RAW) { $evRoot = Join-Path $env:MLOMEGA_RAW 'evidence' }
+    else { $evRoot = Join-Path $ProjectRoot 'data\evidence' }
+  }
+  $kfBytes = Dir-SizeBytes (Join-Path $evRoot 'keyframes')
+  $clipBytes = Dir-SizeBytes (Join-Path $evRoot 'clips')
+  $bufBytes = Dir-SizeBytes (Join-Path $evRoot 'day_buffer')
+  $kf = if ($kfBytes -lt 0) { 0 } else { $kfBytes }
+  $cl = if ($clipBytes -lt 0) { 0 } else { $clipBytes }
+  $bf = if ($bufBytes -lt 0) { 0 } else { $bufBytes }
+  Check-Ok "evidence/keyframes: $(Fmt-Gb $kfBytes) | clips: $(Fmt-Gb $clipBytes)"
+
+  # Total tracked footprint (DB + models + evidence) against warn/fail thresholds.
+  $totalBytes = [long]$dbBytes + [long]([Math]::Max(0, $modelsBytes)) + [long]$kf + [long]$cl + [long]$bf
+  $totalGb = $totalBytes / 1GB
+  if ($totalGb -ge $failGb) {
+    Check-Fail ("Empreinte totale {0:N2} Go >= seuil FAIL {1} Go. Purge conseillee: close-day (tampon-jour) + rotation evidence/clips." -f $totalGb, $failGb)
+  } elseif ($totalGb -ge $warnGb) {
+    Check-Warn ("Empreinte totale {0:N2} Go >= seuil WARN {1} Go (FAIL a {2} Go). Surveille evidence/clips." -f $totalGb, $warnGb, $failGb)
+  } else {
+    Check-Ok ("Empreinte totale {0:N2} Go (WARN {1} Go / FAIL {2} Go)." -f $totalGb, $warnGb, $failGb)
+  }
+
+  # Day buffer: the close-day purge already empties it (EvidenceStore.purge_day_buffer);
+  # flag it when it grows past its own thresholds so the operator runs a close-day.
+  $bufGb = $bf / 1GB
+  if ($bufGb -ge $bufFailGb) {
+    Check-Fail ("Tampon-jour {0:N2} Go >= FAIL {1} Go. Lance un close-day (purge_day_buffer vide ce tampon)." -f $bufGb, $bufFailGb)
+  } elseif ($bufGb -ge $bufWarnGb) {
+    Check-Warn ("Tampon-jour {0:N2} Go >= WARN {1} Go. Un close-day le purgera (EvidenceStore.purge_day_buffer)." -f $bufGb, $bufWarnGb)
+  } else {
+    Check-Ok ("Tampon-jour {0:N2} Go (WARN {1} / FAIL {2} Go) - purge au close-day." -f $bufGb, $bufWarnGb, $bufFailGb)
+  }
 }
 
 # --- Summary ---
